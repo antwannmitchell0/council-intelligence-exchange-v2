@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getBrowserClient } from "@/lib/supabase/client"
 import { council } from "@/design/tokens"
 import { cn } from "@/lib/utils"
 
@@ -27,37 +26,31 @@ export function EarlyAccessForm() {
     setStatus("submitting")
     setError(null)
 
-    const supabase = getBrowserClient()
-    if (!supabase) {
-      setStatus("error")
-      setError("Unable to reach the Council. Try again in a moment.")
-      return
-    }
-
-    const payload = {
-      email: email.trim(),
-      agent_id: agentId || null,
-      company: company.trim() || null,
-      use_case: useCase.trim() || null,
-    }
-    const { error: insertError } = await (supabase as unknown as {
-      from: (t: string) => {
-        insert: (v: typeof payload) => Promise<{ error: { message: string } | null }>
+    try {
+      const res = await fetch("/api/marketplace/early-access", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          agent_id: agentId || null,
+          company: company.trim() || null,
+          use_case: useCase.trim() || null,
+        }),
+      })
+      const json = (await res.json()) as { ok: boolean; error?: string }
+      if (!res.ok || !json.ok) {
+        setStatus("error")
+        setError(json.error ?? "Something went wrong. Try again.")
+        return
       }
-    })
-      .from("v2_early_access_requests")
-      .insert(payload)
-
-    if (insertError) {
+      setStatus("ok")
+      setEmail("")
+      setCompany("")
+      setUseCase("")
+    } catch {
       setStatus("error")
-      setError(insertError.message)
-      return
+      setError("Network error. Check your connection and retry.")
     }
-
-    setStatus("ok")
-    setEmail("")
-    setCompany("")
-    setUseCase("")
   }
 
   if (status === "ok") {
