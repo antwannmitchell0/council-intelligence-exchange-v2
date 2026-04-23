@@ -1,24 +1,45 @@
 import type { Metadata } from "next"
 import { Footer } from "@/components/sections/footer"
-import { IsoFloorScene } from "@/components/floor/iso-floor-scene"
+import { Floor3DWrapper } from "@/components/floor/floor-3d-wrapper"
 import { SilhouetteAvatar } from "@/components/floor/silhouette-avatar"
 import { NexusGlyph } from "@/components/nexus-glyph"
 import { council } from "@/design/tokens"
 import { cn } from "@/lib/utils"
 import { getPublicServerClient } from "@/lib/supabase/server"
-import type { AgentRow } from "@/lib/supabase/types"
+import type {
+  AgentRow,
+  SignalRow,
+  SourceRow,
+} from "@/lib/supabase/types"
 
 export const metadata: Metadata = {
   title: "The Floor",
   description:
-    "The Floor — isometric view of The Council's operational agents at work.",
+    "The Council Trading Floor — rotate, zoom, click any agent to see their full profile.",
 }
 
-async function fetchAgents(): Promise<AgentRow[]> {
+async function fetchFloor(): Promise<{
+  agents: AgentRow[]
+  sources: SourceRow[]
+  signals: SignalRow[]
+}> {
   const supabase = getPublicServerClient()
-  if (!supabase) return []
-  const { data } = await supabase.from("v2_agents").select("*")
-  return data ?? []
+  if (!supabase) return { agents: [], sources: [], signals: [] }
+  const [agentsRes, sourcesRes, signalsRes] = await Promise.all([
+    supabase.from("v2_agents").select("*"),
+    supabase.from("v2_sources").select("*"),
+    supabase
+      .from("v2_signals")
+      .select("*")
+      .eq("status", "verified")
+      .order("created_at", { ascending: false })
+      .limit(30),
+  ])
+  return {
+    agents: agentsRes.data ?? [],
+    sources: sourcesRes.data ?? [],
+    signals: signalsRes.data ?? [],
+  }
 }
 
 function fallbackAgent(staticAgent: (typeof council.agent)[number]): AgentRow {
@@ -58,7 +79,7 @@ const ARCHETYPE_IDS = new Set<string>([
 ])
 
 export default async function FloorPage() {
-  const dbAgents = await fetchAgents()
+  const { agents: dbAgents, sources, signals } = await fetchFloor()
   const byId = new Map<string, AgentRow>()
   for (const a of dbAgents) byId.set(a.id, a)
   for (const staticAgent of council.agent) {
@@ -66,44 +87,107 @@ export default async function FloorPage() {
   }
   const allAgents = Array.from(byId.values())
 
+  const verifiedCount = allAgents.filter((a) => a.status === "verified").length
+  const pendingCount = allAgents.length - verifiedCount
   const operational = allAgents.filter((a) => OPERATIONAL_IDS.has(a.id))
   const specialists = allAgents.filter((a) => SPECIALIST_IDS.has(a.id))
   const archetypes = allAgents.filter((a) => ARCHETYPE_IDS.has(a.id))
 
-  const verifiedCount = allAgents.filter((a) => a.status === "verified").length
-
   return (
     <main className="relative flex-1">
-      <section className="relative border-b border-graphite px-6 pt-28 pb-12 sm:pt-32">
+      <section className="relative border-b border-graphite px-6 pt-28 pb-10 sm:pt-32">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 overflow-hidden"
         >
-          <div className="absolute left-1/2 top-0 h-[520px] w-[1040px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(124,92,255,0.16),transparent_70%)]" />
+          <div className="absolute left-1/2 top-0 h-[520px] w-[1040px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(124,92,255,0.18),transparent_70%)]" />
         </div>
 
         <div className="relative mx-auto flex max-w-6xl flex-col items-center text-center">
           <p className="mono mb-6 text-[11px] uppercase tracking-[0.24em] text-ink-muted">
-            The Floor
+            The Council Trading Floor
           </p>
-          <h1 className="mb-8 max-w-[22ch] text-[48px] font-semibold leading-[1] tracking-[-0.03em] text-ink sm:text-[72px]">
-            The Council, <span className="text-violet-glow">at work.</span>
+          <h1 className="mb-8 max-w-[22ch] text-[44px] font-semibold leading-[1.02] tracking-[-0.03em] text-ink sm:text-[72px]">
+            {allAgents.length} agents.
+            <br />
+            <span className="text-violet-glow">
+              {verifiedCount} live on the floor.
+            </span>
           </h1>
           <p className="max-w-[56ch] text-[17px] leading-[1.6] text-ink-body/85">
-            Each silhouette is a verified agent at its desk. When one crosses
-            the floor to another, it's delivering a signal. The empty desks are
-            the ones still in verification.
+            Rotate the floor. Click any desk to inspect the agent — bio,
+            sources, real track record. The empty desks are for agents still in
+            verification.
           </p>
         </div>
       </section>
 
       <section className="border-b border-graphite px-6 py-10">
-        <div className="mx-auto max-w-6xl">
-          <IsoFloorScene agents={allAgents} />
-          <p className="mono mt-4 text-center text-[11px] uppercase tracking-[0.14em] text-ink-veiled">
-            {verifiedCount} of {allAgents.length} live · hover any desk to see
-            the agent
-          </p>
+        <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1fr_280px]">
+          {/* 3D floor */}
+          <Floor3DWrapper
+            agents={allAgents}
+            sources={sources}
+            latestSignals={signals}
+          />
+
+          {/* Stats sidebar — REAL numbers, no fake 100% */}
+          <aside className="flex flex-col gap-4">
+            <div className="rounded-[12px] border border-graphite bg-obsidian/40 p-5">
+              <p className="mono mb-3 text-[10px] uppercase tracking-[0.18em] text-ink-muted">
+                Systems status
+              </p>
+              <div className="mb-4 flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="h-2 w-2 rounded-full bg-success"
+                  style={{ boxShadow: "0 0 8px var(--council-success)" }}
+                />
+                <span className="mono text-[11px] uppercase tracking-[0.14em] text-success">
+                  All systems operational
+                </span>
+              </div>
+              <dl className="flex flex-col gap-3">
+                <StatRow label="Total agents" value={String(allAgents.length)} />
+                <StatRow
+                  label="Verified on floor"
+                  value={String(verifiedCount)}
+                  highlight
+                />
+                <StatRow
+                  label="In verification"
+                  value={String(pendingCount)}
+                />
+                <StatRow
+                  label="Operational"
+                  value={String(operational.length)}
+                />
+                <StatRow
+                  label="Trading specialists"
+                  value={String(specialists.length)}
+                />
+                <StatRow
+                  label="Archetypes"
+                  value={String(archetypes.length)}
+                />
+              </dl>
+              <p className="mono mt-4 border-t border-graphite/60 pt-3 text-[10px] uppercase tracking-[0.14em] text-ink-veiled">
+                Stage · paper-traded
+              </p>
+            </div>
+
+            <div className="rounded-[12px] border border-dashed border-graphite bg-obsidian/20 p-5">
+              <p className="mono mb-2 text-[10px] uppercase tracking-[0.18em] text-ink-muted">
+                How to use the floor
+              </p>
+              <ul className="flex flex-col gap-2 text-[13px] leading-[1.55] text-ink-body/75">
+                <li>• Drag to rotate</li>
+                <li>• Scroll to zoom</li>
+                <li>• Right-click-drag to pan</li>
+                <li>• Click a desk — agent's full story opens</li>
+              </ul>
+            </div>
+          </aside>
         </div>
       </section>
 
@@ -144,6 +228,30 @@ export default async function FloorPage() {
   )
 }
 
+function StatRow({
+  label,
+  value,
+  highlight,
+}: {
+  label: string
+  value: string
+  highlight?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <dt className="text-[12px] text-ink-body/70">{label}</dt>
+      <dd
+        className={cn(
+          "mono text-[14px] font-medium",
+          highlight ? "council-verified" : "text-ink"
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  )
+}
+
 function CategoryList({
   title,
   eyebrow,
@@ -176,7 +284,7 @@ function CategoryList({
             <li
               key={agent.id}
               className={cn(
-                "grid grid-cols-[56px_1fr_auto_auto] items-center gap-4 px-5 py-3 transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-graphite/40",
+                "grid grid-cols-[56px_1fr_auto] items-center gap-4 px-5 py-3 transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-graphite/40",
                 i !== sorted.length - 1 && "border-b border-graphite/60",
                 isVerified ? "bg-obsidian/60" : "bg-obsidian/30"
               )}
@@ -197,13 +305,6 @@ function CategoryList({
                   </span>
                 ) : null}
               </div>
-              {agent.tier_label ? (
-                <span className="mono hidden text-[10px] uppercase tracking-[0.14em] text-ink-muted sm:inline">
-                  {agent.tier_label}
-                </span>
-              ) : (
-                <span />
-              )}
               <span
                 className={cn(
                   "mono rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em]",
