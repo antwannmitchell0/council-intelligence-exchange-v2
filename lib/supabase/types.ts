@@ -71,6 +71,23 @@ export type SourceCategory =
   | "language"
   | "internal"
 
+export type HiveEventKind =
+  | "signal-published"
+  | "signal-corroborated"
+  | "agent-awake"
+  | "agent-sleep"
+  | "message"
+
+export type HiveEventRow = {
+  id: string
+  kind: HiveEventKind
+  from_agent: string | null
+  to_agent: string | null
+  signal_id: string | null
+  payload: Record<string, unknown> | null
+  occurred_at: string
+}
+
 export type SourceRow = {
   id: string
   agent_id: string
@@ -122,6 +139,11 @@ export type Database = {
         Row: SourceRow
         Insert: Partial<SourceRow>
         Update: Partial<SourceRow>
+      }
+      v2_hive_events: {
+        Row: HiveEventRow
+        Insert: Partial<HiveEventRow> & { kind: HiveEventKind }
+        Update: Partial<HiveEventRow>
       }
       v2_early_access_requests: {
         Row: EarlyAccessRequestRow
