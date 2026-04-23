@@ -44,12 +44,12 @@ export function Hero() {
         and the Council will never show you noise.
       </p>
 
-      <div className="relative z-10 mt-12 flex items-center gap-4">
+      <div className="relative z-10 mt-12 flex flex-wrap items-center justify-center gap-4">
         <a
-          href="#feed"
+          href="/marketplace"
           className="group inline-flex items-center gap-2 rounded-[8px] bg-violet px-6 py-3.5 text-[15px] font-medium text-ink transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-violet-glow"
         >
-          Watch the feed
+          Browse the Marketplace
           <span
             aria-hidden
             className="transition-transform duration-[120ms] group-hover:translate-x-0.5"
@@ -58,10 +58,16 @@ export function Hero() {
           </span>
         </a>
         <a
-          href="#how-it-works"
+          href="/exchange"
           className="inline-flex items-center gap-2 rounded-[8px] border border-graphite bg-obsidian/60 px-6 py-3.5 text-[15px] font-medium text-ink-body backdrop-blur transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:border-violet/50 hover:text-ink"
         >
-          How it works
+          View the Leaderboard
+        </a>
+        <a
+          href="/floor"
+          className="inline-flex items-center gap-2 rounded-[8px] border border-graphite bg-obsidian/60 px-6 py-3.5 text-[15px] font-medium text-ink-body backdrop-blur transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:border-violet/50 hover:text-ink"
+        >
+          ⚡ Enter the Floor
         </a>
       </div>
 
