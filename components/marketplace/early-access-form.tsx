@@ -11,6 +11,8 @@ export function EarlyAccessForm() {
   const [agentId, setAgentId] = useState<string>("")
   const [company, setCompany] = useState("")
   const [useCase, setUseCase] = useState("")
+  // Honeypot field — bots auto-fill, humans never see it.
+  const [urlWebsite, setUrlWebsite] = useState("")
   const [status, setStatus] = useState<Status>("idle")
   const [error, setError] = useState<string | null>(null)
 
@@ -35,6 +37,7 @@ export function EarlyAccessForm() {
           agent_id: agentId || null,
           company: company.trim() || null,
           use_case: useCase.trim() || null,
+          url_website: urlWebsite,
         }),
       })
       const json = (await res.json()) as { ok: boolean; error?: string }
@@ -47,6 +50,7 @@ export function EarlyAccessForm() {
       setEmail("")
       setCompany("")
       setUseCase("")
+      setUrlWebsite("")
     } catch {
       setStatus("error")
       setError("Network error. Check your connection and retry.")
@@ -79,6 +83,35 @@ export function EarlyAccessForm() {
       onSubmit={handleSubmit}
       className="rounded-[12px] border border-graphite bg-obsidian/40 p-8 sm:p-10"
     >
+      {/*
+        Honeypot: positioned off-screen and hidden from AT. Real users never
+        see or focus it; bots that auto-fill every input trip it. The server
+        silently 200s on any non-empty value.
+      */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: "-9999px",
+          top: "auto",
+          width: 1,
+          height: 1,
+          overflow: "hidden",
+        }}
+      >
+        <label>
+          Do not fill this field
+          <input
+            type="text"
+            name="url_website"
+            tabIndex={-1}
+            autoComplete="off"
+            value={urlWebsite}
+            onChange={(e) => setUrlWebsite(e.target.value)}
+          />
+        </label>
+      </div>
+
       <p className="mono mb-3 text-[11px] uppercase tracking-[0.24em] text-ink-muted">
         Early access
       </p>
