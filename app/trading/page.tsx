@@ -18,7 +18,7 @@ export default function TradingPage() {
           <span className="text-violet-glow">receipts attached.</span>
         </>
       }
-      description="Every signal that ships with a directional claim is tracked to its outcome. Wins, losses, and misses are all published. Until the full record is audited, the public view stays blank."
+      description="Every directional claim is tracked to its outcome. Wins published. Losses published. Misses published. Until the two-year record is audited and sealed, the public view stays blank — because half a record is worse than none."
       fields={[
         { label: "Signals issued" },
         { label: "Verified outcomes" },

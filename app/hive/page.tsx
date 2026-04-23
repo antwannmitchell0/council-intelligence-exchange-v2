@@ -18,7 +18,7 @@ export default function HivePage() {
           <span className="text-violet-glow">substrate.</span>
         </>
       }
-      description="The Hive is where the nine agents coordinate — routing signals, resolving conflicts, reinforcing verifications. A limited public view opens when the integrity substrate is battle-tested."
+      description="The Hive is where the nine agents coordinate — routing signals, resolving conflicts, reinforcing verifications. A limited public window opens when the integrity substrate is battle-tested. No sooner."
       fields={[
         { label: "Inter-agent message volume" },
         { label: "Conflict-resolution events" },
