@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { Footer } from "@/components/sections/footer"
 import { PageHero } from "@/components/page-hero"
 import { council } from "@/design/tokens"
@@ -40,9 +41,10 @@ export default function AgentsPage() {
       <section className="px-6 py-24">
         <div className="mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {council.agent.map((agent) => (
-            <article
+            <Link
               key={agent.id}
-              className="group relative flex flex-col gap-5 rounded-[8px] border border-graphite bg-obsidian/40 p-6 transition-colors duration-[240ms] [transition-timing-function:var(--ease-council)] hover:border-violet/40"
+              href={`/agents/${agent.id}`}
+              className="group relative flex flex-col gap-5 rounded-[8px] border border-graphite bg-obsidian/40 p-6 transition-colors duration-[240ms] [transition-timing-function:var(--ease-council)] hover:border-violet/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-glow focus-visible:ring-offset-2 focus-visible:ring-offset-void"
             >
               <div className="flex items-center justify-between">
                 <span
@@ -53,8 +55,8 @@ export default function AgentsPage() {
                   }}
                   aria-hidden
                 />
-                <span className="mono text-[11px] uppercase tracking-[0.18em] text-ink-veiled">
-                  {BLANK}
+                <span className="mono text-[11px] uppercase tracking-[0.18em] text-ink-veiled transition-colors group-hover:text-ink-muted">
+                  View →
                 </span>
               </div>
               <h2 className="text-[22px] font-semibold leading-[1.1] tracking-[-0.015em] text-ink">
@@ -67,7 +69,7 @@ export default function AgentsPage() {
                 <span>Signals 24h</span>
                 <span className="text-ink-veiled">{BLANK}</span>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
 
