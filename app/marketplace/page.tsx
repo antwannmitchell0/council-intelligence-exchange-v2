@@ -10,7 +10,7 @@ import type { AgentRow, SignalRow, SourceRow } from "@/lib/supabase/types"
 export const metadata: Metadata = {
   title: "Marketplace",
   description:
-    "Verified Council agents, licensed cleanly. Subscribe per agent, bundle all nine, or license for enterprise.",
+    "The Council roster — verified signal specialists and operational agents. Licensed cleanly.",
 }
 
 async function fetchCatalog(): Promise<{
@@ -58,10 +58,39 @@ const licensingSteps = [
   },
 ]
 
+function fallbackAgent(
+  staticAgent: (typeof council.agent)[number]
+): AgentRow {
+  return {
+    id: staticAgent.id,
+    name: staticAgent.name,
+    hex: staticAgent.hex,
+    brief: null,
+    bio_md: null,
+    specialty: null,
+    joined_at: new Date().toISOString(),
+    status: "pending",
+    price_monthly_cents: null,
+    tier_label: null,
+  }
+}
+
+const STATUS_ORDER: Record<string, number> = {
+  verified: 0,
+  pending: 1,
+  unverified: 2,
+}
+
 export default async function MarketplacePage() {
   const { agents, sources, latestSignals } = await fetchCatalog()
 
-  const agentsById = new Map(agents.map((a) => [a.id, a]))
+  // Union DB agents + static operational fallback. DB wins per id; static fills gaps.
+  const byId = new Map<string, AgentRow>()
+  for (const a of agents) byId.set(a.id, a)
+  for (const staticAgent of council.agent) {
+    if (!byId.has(staticAgent.id)) byId.set(staticAgent.id, fallbackAgent(staticAgent))
+  }
+
   const sourcesByAgent = new Map<string, SourceRow[]>()
   for (const s of sources) {
     const list = sourcesByAgent.get(s.agent_id) ?? []
@@ -69,41 +98,24 @@ export default async function MarketplacePage() {
     sourcesByAgent.set(s.agent_id, list)
   }
 
-  // Prefer real data, fall back to static tokens so the grid always renders 9.
-  const grid = council.agent.map((staticAgent) => {
-    const real = agentsById.get(staticAgent.id)
-    const agent: AgentRow =
-      real ??
-      ({
-        id: staticAgent.id,
-        name: staticAgent.name,
-        hex: staticAgent.hex,
-        brief: null,
-        bio_md: null,
-        specialty: null,
-        joined_at: new Date().toISOString(),
-        status: "pending" as const,
-        price_monthly_cents: null,
-        tier_label: null,
-      } satisfies AgentRow)
-    return { agent, sources: sourcesByAgent.get(staticAgent.id) ?? [] }
-  })
+  const grid = Array.from(byId.values())
+    .map((agent) => ({
+      agent,
+      sources: sourcesByAgent.get(agent.id) ?? [],
+    }))
+    .sort((a, b) => {
+      const orderDiff =
+        (STATUS_ORDER[a.agent.status] ?? 3) -
+        (STATUS_ORDER[b.agent.status] ?? 3)
+      if (orderDiff !== 0) return orderDiff
+      return a.agent.name.localeCompare(b.agent.name)
+    })
 
-  // Sort: verified agents first, then pending.
-  grid.sort((a, b) => {
-    const order: Record<string, number> = {
-      verified: 0,
-      pending: 1,
-      unverified: 2,
-    }
-    return (
-      (order[a.agent.status] ?? 3) - (order[b.agent.status] ?? 3)
-    )
-  })
-
+  const total = grid.length
   const availableCount = grid.filter(
     (g) => g.agent.status === "verified"
   ).length
+  const pendingCount = total - availableCount
 
   return (
     <main className="relative flex-1">
@@ -111,7 +123,7 @@ export default async function MarketplacePage() {
         eyebrow="Marketplace"
         title={
           <>
-            Nine agents.
+            The Council roster.
             <br />
             <span className="text-violet-glow">Licensed cleanly.</span>
           </>
@@ -119,10 +131,12 @@ export default async function MarketplacePage() {
         description={
           <>
             Every Council agent is a standalone product. Subscribe to one,
-            bundle the house, or integrate the enterprise stream. Only agents
-            that have passed verification are available today —{" "}
-            <span className="council-verified">{availableCount} of 9</span> at
-            launch.
+            bundle the house, or integrate the enterprise stream.{" "}
+            <span className="council-verified">
+              {availableCount} of {total}
+            </span>{" "}
+            are currently verified and available; the remaining {pendingCount}{" "}
+            are in verification.
           </>
         }
       />
@@ -139,7 +153,7 @@ export default async function MarketplacePage() {
               </h2>
             </div>
             <p className="mono hidden text-[11px] uppercase tracking-[0.18em] text-ink-muted md:block">
-              {availableCount} available · {9 - availableCount} in verification
+              {availableCount} verified · {pendingCount} in verification
             </p>
           </div>
           <MarketplaceGrid items={grid} latestSignals={latestSignals} />
