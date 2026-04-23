@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { Footer } from "@/components/sections/footer"
 import { PageHero } from "@/components/page-hero"
+import { SilhouetteAvatar } from "@/components/floor/silhouette-avatar"
 import { council } from "@/design/tokens"
 import { getPublicServerClient } from "@/lib/supabase/server"
 import { cn } from "@/lib/utils"
@@ -95,16 +96,13 @@ function AgentCard({ agent }: { agent: AgentRow }) {
       href={`/agents/${agent.id}`}
       className="group relative flex flex-col gap-5 rounded-[8px] border border-graphite bg-obsidian/40 p-6 transition-colors duration-[240ms] [transition-timing-function:var(--ease-council)] hover:border-violet/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-glow focus-visible:ring-offset-2 focus-visible:ring-offset-void"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span
-            className="h-2.5 w-2.5 rounded-full"
-            style={{
-              backgroundColor: agent.hex,
-              boxShadow: isVerified ? `0 0 10px ${agent.hex}` : "none",
-              opacity: isVerified ? 1 : 0.5,
-            }}
-            aria-hidden
+          <SilhouetteAvatar
+            color={agent.hex}
+            size={40}
+            dimmed={!isVerified}
+            label={agent.name}
           />
           <span
             className={cn(
