@@ -34,56 +34,19 @@ export const config: VercelConfig = {
       path: "/api/cron/integrity-audit",
       schedule: "0 6 * * *",
     },
-    // Phase 3 trading-specialist ingestion.
-    // SEC + Congress agents: 6-hourly (filings land continuously during business hours).
-    {
-      path: "/api/cron/ingest?agent=insider-filing-agent",
-      schedule: "0 */6 * * *",
-    },
-    {
-      path: "/api/cron/ingest?agent=thirteen-f-agent",
-      schedule: "0 */6 * * *",
-    },
-    {
-      path: "/api/cron/ingest?agent=congress-agent",
-      schedule: "0 */6 * * *",
-    },
-    // FRED / BLS agents: daily at 08:00 UTC (~03:00 ET — after US market close
-    // data has landed and upstream publishers have settled).
-    {
-      path: "/api/cron/ingest?agent=yield-curve-agent",
-      schedule: "0 8 * * *",
-    },
-    {
-      path: "/api/cron/ingest?agent=jobs-data-agent",
-      schedule: "0 8 * * *",
-    },
-    {
-      path: "/api/cron/ingest?agent=fed-futures-agent",
-      schedule: "0 8 * * *",
-    },
-    // Phase 6a archetype ingestion.
-    // GDELT: every 3h — tone-anomaly bursts are fast-decaying news signals.
-    {
-      path: "/api/cron/ingest?agent=gdelt-event-volume-agent",
-      schedule: "0 */3 * * *",
-    },
-    // Wikipedia pageviews: daily at 09:30 UTC — after Wikimedia's
-    // prior-day batch lands (~24h lag).
-    {
-      path: "/api/cron/ingest?agent=wiki-edit-surge-agent",
-      schedule: "30 9 * * *",
-    },
-    // Etherscan whale outflows: every 2h — on-chain moves are near-real-time.
-    {
-      path: "/api/cron/ingest?agent=etherscan-whale-agent",
-      schedule: "0 */2 * * *",
-    },
-    // ClinicalTrials.gov outcomes: daily at 12:00 UTC — batched updates are
-    // sufficient cadence for biotech catalysts.
-    {
-      path: "/api/cron/ingest?agent=clinical-trial-outcomes-agent",
-      schedule: "0 12 * * *",
-    },
+    // Phase 3 trading-specialist ingestion — daily cadence (Vercel Hobby limit).
+    // Staggered across the morning so pulls don't thundering-herd the same upstream.
+    // Upgrade to Pro unlocks sub-daily cadence for the time-sensitive sources.
+    { path: "/api/cron/ingest?agent=insider-filing-agent", schedule: "0 7 * * *" },
+    { path: "/api/cron/ingest?agent=thirteen-f-agent", schedule: "15 7 * * *" },
+    { path: "/api/cron/ingest?agent=congress-agent", schedule: "30 7 * * *" },
+    { path: "/api/cron/ingest?agent=yield-curve-agent", schedule: "0 8 * * *" },
+    { path: "/api/cron/ingest?agent=jobs-data-agent", schedule: "15 8 * * *" },
+    { path: "/api/cron/ingest?agent=fed-futures-agent", schedule: "30 8 * * *" },
+    // Phase 6a archetype ingestion — daily cadence.
+    { path: "/api/cron/ingest?agent=gdelt-event-volume-agent", schedule: "0 10 * * *" },
+    { path: "/api/cron/ingest?agent=wiki-edit-surge-agent", schedule: "30 9 * * *" },
+    { path: "/api/cron/ingest?agent=etherscan-whale-agent", schedule: "0 11 * * *" },
+    { path: "/api/cron/ingest?agent=clinical-trial-outcomes-agent", schedule: "0 12 * * *" },
   ],
 }
