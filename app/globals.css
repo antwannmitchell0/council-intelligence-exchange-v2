@@ -1,26 +1,173 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --council-void: #0a0b0f;
+  --council-obsidian: #12131a;
+  --council-graphite: #1c1e28;
+
+  --council-violet: #7c5cff;
+  --council-violet-glow: #9d82ff;
+  --council-violet-deep: #4a2fd6;
+
+  --council-cyan: #29e6d1;
+
+  --council-amber: #f5a524;
+  --council-danger: #ff4d6d;
+  --council-success: #4ade80;
+
+  --council-ink: #f8f9fb;
+  --council-ink-body: #e6e7eb;
+  --council-ink-muted: #8a8d9a;
+  --council-ink-veiled: #4f5260;
+
+  --ease-council: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-council-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-council-sharp: cubic-bezier(0.4, 0, 0.6, 1);
+
+  --color-background: var(--council-void);
+  --color-foreground: var(--council-ink-body);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-void: var(--council-void);
+  --color-obsidian: var(--council-obsidian);
+  --color-graphite: var(--council-graphite);
+  --color-violet: var(--council-violet);
+  --color-violet-glow: var(--council-violet-glow);
+  --color-violet-deep: var(--council-violet-deep);
+  --color-cyan: var(--council-cyan);
+  --color-council-amber: var(--council-amber);
+  --color-danger: var(--council-danger);
+  --color-success: var(--council-success);
+  --color-ink: var(--council-ink);
+  --color-ink-body: var(--council-ink-body);
+  --color-ink-muted: var(--council-ink-muted);
+  --color-ink-veiled: var(--council-ink-veiled);
+  --font-display: var(--font-inter);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
+  --ease-council: var(--ease-council);
+  --ease-council-out: var(--ease-council-out);
+  --ease-council-sharp: var(--ease-council-sharp);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html,
+body {
+  background: var(--council-void);
+  color: var(--council-ink-body);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--council-violet-deep);
+  color: var(--council-ink);
+}
+
+/* Focus ring — Council signature */
+:focus-visible {
+  outline: 2px solid var(--council-violet-glow);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.mono {
+  font-family: var(--font-jetbrains), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.council-verified {
+  color: var(--council-cyan);
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.council-verified::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--council-cyan);
+  margin-right: 8px;
+  vertical-align: middle;
+  transform: translateY(-1px);
+  box-shadow: 0 0 6px var(--council-cyan);
+}
+
+/* Grain / noise overlay for dimensional depth */
+.council-grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+/* Nexus Glyph animations */
+@keyframes council-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.02);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes council-trace {
+  0% {
+    stroke-dashoffset: 240;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes council-pulse {
+  0%,
+  100% {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 6px var(--council-cyan));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 14px var(--council-cyan));
+  }
+}
+
+@keyframes council-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
 }
