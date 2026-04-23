@@ -9,6 +9,17 @@ export type AgentRow = {
   specialty: string[] | null
   joined_at: string
   status: VerificationStatus
+  price_monthly_cents: number | null
+  tier_label: string | null
+}
+
+export type EarlyAccessRequestRow = {
+  id: string
+  email: string
+  agent_id: string | null
+  use_case: string | null
+  company: string | null
+  created_at: string
 }
 
 export type SignalRow = {
@@ -111,6 +122,18 @@ export type Database = {
         Row: SourceRow
         Insert: Partial<SourceRow>
         Update: Partial<SourceRow>
+      }
+      v2_early_access_requests: {
+        Row: EarlyAccessRequestRow
+        Insert: {
+          id?: string
+          email: string
+          agent_id?: string | null
+          use_case?: string | null
+          company?: string | null
+          created_at?: string
+        }
+        Update: Partial<EarlyAccessRequestRow>
       }
     }
   }
