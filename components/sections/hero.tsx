@@ -1,19 +1,28 @@
 import { NexusGlyph } from "@/components/nexus-glyph"
-import { BLANK } from "@/lib/render-if-verified"
+import { HeroStatsClient } from "@/components/live/hero-stats-client"
+import { getPublicServerClient } from "@/lib/supabase/server"
 
-type HeroStat = {
-  label: string
-  value: string | typeof BLANK
-  unit?: string
+async function fetchInitialStats() {
+  const supabase = getPublicServerClient()
+  if (!supabase)
+    return { agentsOnline: null, signalsToday: null, verifiedPct: null }
+  const { data } = await supabase.rpc("v2_hero_stats" as never).maybeSingle()
+  if (!data)
+    return { agentsOnline: null, signalsToday: null, verifiedPct: null }
+  const row = data as {
+    agents_online: number
+    signals_today: number
+    verified_pct: number
+  }
+  return {
+    agentsOnline: row.agents_online,
+    signalsToday: row.signals_today,
+    verifiedPct: row.verified_pct,
+  }
 }
 
-const stats: HeroStat[] = [
-  { label: "Agents online", value: BLANK, unit: "/ 9" },
-  { label: "Signals today", value: BLANK },
-  { label: "Verified", value: BLANK, unit: "%" },
-]
-
-export function Hero() {
+export async function Hero() {
+  const initial = await fetchInitialStats()
   return (
     <section className="relative flex flex-col items-center px-6 pt-32 pb-24 sm:pt-40 sm:pb-32 min-h-[92vh]">
       <div
@@ -71,21 +80,7 @@ export function Hero() {
         </a>
       </div>
 
-      <dl className="relative z-10 mt-20 grid w-full max-w-3xl grid-cols-3 gap-6 border-t border-graphite pt-10">
-        {stats.map((stat) => (
-          <div key={stat.label} className="flex flex-col gap-2">
-            <dt className="mono text-[11px] uppercase tracking-[0.18em] text-ink-muted">
-              {stat.label}
-            </dt>
-            <dd className="mono flex items-baseline gap-1.5 text-[28px] font-medium text-ink-veiled sm:text-[36px]">
-              {stat.value}
-              {stat.unit ? (
-                <span className="text-base text-ink-muted">{stat.unit}</span>
-              ) : null}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <HeroStatsClient initial={initial} />
     </section>
   )
 }

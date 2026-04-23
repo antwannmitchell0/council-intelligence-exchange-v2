@@ -1,16 +1,24 @@
 import type { Metadata } from "next"
 import { Footer } from "@/components/sections/footer"
+import { FloorTelemetryClient } from "@/components/live/floor-telemetry-client"
 import { NexusGlyph } from "@/components/nexus-glyph"
-import { council } from "@/design/tokens"
-import { BLANK } from "@/lib/render-if-verified"
+import { getPublicServerClient } from "@/lib/supabase/server"
+import type { HeartbeatRow } from "@/lib/supabase/types"
 
 export const metadata: Metadata = {
   title: "The Floor",
-  description:
-    "The Floor — live operational view of the nine-agent Hive.",
+  description: "The Floor — live operational view of the nine-agent Hive.",
 }
 
-export default function FloorPage() {
+async function fetchHeartbeats(): Promise<HeartbeatRow[]> {
+  const supabase = getPublicServerClient()
+  if (!supabase) return []
+  const { data } = await supabase.from("v2_agent_heartbeats").select("*")
+  return data ?? []
+}
+
+export default async function FloorPage() {
+  const initial = await fetchHeartbeats()
   return (
     <main className="relative flex-1">
       <section className="relative border-b border-graphite px-6 pt-32 pb-20">
@@ -45,33 +53,7 @@ export default function FloorPage() {
           <h2 className="mb-12 max-w-[22ch] text-[36px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-[44px]">
             Agent status — now.
           </h2>
-
-          <div className="grid gap-3">
-            {council.agent.map((agent) => (
-              <div
-                key={agent.id}
-                className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-6 rounded-[8px] border border-graphite bg-obsidian/40 px-6 py-5"
-              >
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{
-                    backgroundColor: agent.hex,
-                    boxShadow: `0 0 12px ${agent.hex}`,
-                  }}
-                  aria-hidden
-                />
-                <span className="text-[15px] font-medium text-ink">
-                  {agent.name}
-                </span>
-                <span className="mono text-[11px] uppercase tracking-[0.14em] text-ink-muted">
-                  status
-                </span>
-                <span className="mono text-[13px] text-ink-veiled">
-                  {BLANK}
-                </span>
-              </div>
-            ))}
-          </div>
+          <FloorTelemetryClient initialHeartbeats={initial} />
         </div>
       </section>
       <Footer />
