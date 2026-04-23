@@ -39,6 +39,42 @@ export type HeartbeatRow = {
   last_signal_id: string | null
 }
 
+export type SourceKind =
+  | "realtime"
+  | "api"
+  | "feed"
+  | "scrape"
+  | "filing"
+  | "on-chain"
+  | "webhook"
+  | "database"
+
+export type SourceCategory =
+  | "markets"
+  | "regulatory"
+  | "infrastructure"
+  | "geopolitics"
+  | "science"
+  | "private-capital"
+  | "on-chain"
+  | "language"
+  | "internal"
+
+export type SourceRow = {
+  id: string
+  agent_id: string
+  name: string
+  kind: SourceKind
+  category: SourceCategory
+  description: string | null
+  cadence: string | null
+  endpoint_public: boolean
+  endpoint: string | null
+  status: VerificationStatus
+  verified_at: string | null
+  created_at: string
+}
+
 export type DirectionalSignalRow = {
   id: string
   agent_id: string
@@ -70,6 +106,11 @@ export type Database = {
         Row: DirectionalSignalRow
         Insert: Partial<DirectionalSignalRow>
         Update: Partial<DirectionalSignalRow>
+      }
+      v2_sources: {
+        Row: SourceRow
+        Insert: Partial<SourceRow>
+        Update: Partial<SourceRow>
       }
     }
   }
