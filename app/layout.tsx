@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { Nav } from "@/components/nav"
+import { LegalFooter } from "@/components/legal-footer"
 import "./globals.css"
 
 const inter = Inter({
@@ -47,6 +48,7 @@ export default function RootLayout({
       <body className="council-grain min-h-full flex flex-col bg-void text-ink-body">
         <Nav />
         {children}
+        <LegalFooter />
       </body>
     </html>
   )
