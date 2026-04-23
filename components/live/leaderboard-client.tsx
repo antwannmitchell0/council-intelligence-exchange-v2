@@ -69,67 +69,74 @@ export function LeaderboardClient({ initialRows, agents }: Props) {
       </div>
 
       <ul>
-        {council.agent.map((staticAgent, i) => {
-          const agent = agentMap.get(staticAgent.id) ?? {
-            ...staticAgent,
-            brief: null,
-            bio_md: null,
-            specialty: null,
-            joined_at: new Date().toISOString(),
-            status: "pending" as const,
-          }
-          const row = byAgent.get(staticAgent.id)
-          const flashing = flashIds.has(staticAgent.id)
-          const rank = row?.rank ?? i + 1
-          return (
-            <li
-              key={staticAgent.id}
-              className={`grid grid-cols-[48px_1fr_120px_120px_80px] items-center gap-4 border-b border-graphite/60 px-6 py-5 last:border-b-0 transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-graphite/40 ${
-                flashing ? "bg-violet-deep/10" : ""
-              }`}
-            >
-              <span
-                className={`mono text-[18px] font-semibold ${
-                  rank <= 3 ? "text-violet" : "text-ink-muted"
+        {[...council.agent]
+          .sort((a, b) => {
+            const ra = byAgent.get(a.id)?.rank ?? 999
+            const rb = byAgent.get(b.id)?.rank ?? 999
+            return ra - rb
+          })
+          .map((staticAgent) => {
+            const agent = agentMap.get(staticAgent.id) ?? {
+              ...staticAgent,
+              brief: null,
+              bio_md: null,
+              specialty: null,
+              joined_at: new Date().toISOString(),
+              status: "pending" as const,
+            }
+            const row = byAgent.get(staticAgent.id)
+            const flashing = flashIds.has(staticAgent.id)
+            const rank = row?.rank ?? null
+            return (
+              <li
+                key={staticAgent.id}
+                className={`grid grid-cols-[48px_1fr_120px_120px_80px] items-center gap-4 border-b border-graphite/60 px-6 py-5 last:border-b-0 transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-graphite/40 ${
+                  flashing ? "bg-violet-deep/10" : ""
                 }`}
               >
-                {String(rank).padStart(2, "0")}
-              </span>
-              <span className="flex items-center gap-3 text-[15px] font-medium text-ink">
                 <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{
-                    backgroundColor: agent.hex,
-                    boxShadow: `0 0 8px ${agent.hex}`,
-                  }}
-                  aria-hidden
-                />
-                {agent.name}
-              </span>
-              <span
-                className={`mono text-right text-[15px] ${
-                  row ? "text-ink" : "text-ink-veiled"
-                }`}
-              >
-                {row?.signals_24h ?? BLANK}
-              </span>
-              <span
-                className={`mono text-right text-[15px] ${
-                  row ? "text-cyan" : "text-ink-veiled"
-                }`}
-              >
-                {row ? `${Math.round(row.verified_pct)}%` : BLANK}
-              </span>
-              <span className="mono text-right text-[15px]">
-                {row?.trend_7d && row.trend_7d.length > 1 ? (
-                  <Sparkline values={row.trend_7d} color={agent.hex} />
-                ) : (
-                  <span className="text-ink-veiled">{BLANK}</span>
-                )}
-              </span>
-            </li>
-          )
-        })}
+                  className={`mono text-[18px] font-semibold ${
+                    rank && rank <= 3 ? "text-violet" : "text-ink-veiled"
+                  }`}
+                >
+                  {rank ? String(rank).padStart(2, "0") : BLANK}
+                </span>
+                <span className="flex items-center gap-3 text-[15px] font-medium text-ink">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{
+                      backgroundColor: agent.hex,
+                      boxShadow: row ? `0 0 8px ${agent.hex}` : "none",
+                      opacity: row ? 1 : 0.45,
+                    }}
+                    aria-hidden
+                  />
+                  {agent.name}
+                </span>
+                <span
+                  className={`mono text-right text-[15px] ${
+                    row ? "text-ink" : "text-ink-veiled"
+                  }`}
+                >
+                  {row?.signals_24h ?? BLANK}
+                </span>
+                <span
+                  className={`mono text-right text-[15px] ${
+                    row ? "text-cyan" : "text-ink-veiled"
+                  }`}
+                >
+                  {row ? `${Math.round(row.verified_pct)}%` : BLANK}
+                </span>
+                <span className="mono text-right text-[15px]">
+                  {row?.trend_7d && row.trend_7d.length > 1 ? (
+                    <Sparkline values={row.trend_7d} color={agent.hex} />
+                  ) : (
+                    <span className="text-ink-veiled">{BLANK}</span>
+                  )}
+                </span>
+              </li>
+            )
+          })}
       </ul>
     </div>
   )
