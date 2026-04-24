@@ -133,14 +133,13 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
       const accession = src?.adsh ?? hit._id
       if (!accession) continue
 
-      // EDGAR's search-index populates `tickers` inconsistently for Form 4
-      // (filings are indexed by the reporting person, not the issuer).
-      // Fall back to the CIK→ticker map so the order router has a
-      // tradable symbol.
-      const issuerCik = src?.ciks?.[0] ?? null
-      const indexedTicker = src?.tickers?.[0] ?? null
-      const resolvedTicker =
-        indexedTicker ?? (issuerCik ? await lookupTicker(issuerCik) : null)
+      // Form 4 EDGAR search-index hits contain TWO ciks: the reporting
+      // person at [0] and the issuer at [1]. Same ordering for
+      // display_names. `tickers` is consistently null on Form 4 hits, so
+      // we always resolve via SEC's CIK→ticker map.
+      const reporterCik = src?.ciks?.[0] ?? null
+      const issuerCik = src?.ciks?.[1] ?? null
+      const resolvedTicker = issuerCik ? await lookupTicker(issuerCik) : null
 
       const payload: Form4Payload = {
         accession,
@@ -151,6 +150,8 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
         file_date: src?.file_date ?? null,
         raw: hit,
       }
+      // Keep the reporter CIK on the raw payload for future audit queries.
+      ;(payload as unknown as { reporter_cik?: string | null }).reporter_cik = reporterCik
 
       out.push({
         source_id: SOURCE_ID,
