@@ -31,13 +31,16 @@
 
 **Goal:** every wired agent emits tradable signals + starts a broker-paper clock.
 
+### Done
+
+- **A5** — Macro env keys wired (FRED_API_KEY + BLS_API_KEY in Vercel prod). yield-curve-agent / fed-futures-agent / jobs-data-agent all returned 200 + ingested > 0 on first manual trigger (300 / 100 / 30 signals). Shipped 2026-04-24, Session 2.
+
 | # | Item | Effort | Blocker | Target |
 |---|---|---|---|---|
 | A1 | ADR fallback resolver (`company_tickers_exchange.json`) | 15 min | — | Tonight |
 | A2 | EDGAR pagination (+ lower per-order sizing 1% → 0.25%) | 30 min | — | Tonight |
 | A3 | Congress-agent source replacement | 1-2 hr | Research needed | Session 2 |
 | A4 | Thirteen-f-agent CUSIP→ticker (OpenFIGI API) | 2-3 hr | OpenFIGI free-tier signup | Session 2-3 |
-| A5 | Macro ETF-proxy mapping (yield-curve, jobs-data, fed-futures) | 45-60 min | FRED_API_KEY + BLS_API_KEY | Session 2 |
 | A6 | GDELT entity → ticker mapping | 2 hr | Research for canonical mapping | Session 3 |
 | A7 | Wiki-edit-surge entity → ticker mapping | 2 hr | Same | Session 3 |
 | A8 | Etherscan-whale crypto routing via Alpaca Crypto API | 1-2 hr | — | Session 3 |
