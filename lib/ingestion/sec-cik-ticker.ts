@@ -23,7 +23,13 @@
 import "server-only"
 import { fetchWithRetry, politeUserAgent } from "./http"
 
+// Primary source: US-primary-listed companies. ~7,993 entries.
 const COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+// Fallback source: broader coverage including NYSE/NASDAQ/OTC + foreign ADRs.
+// ~13,000 entries. Different payload shape than the primary file — uses
+// a "data" array with positional columns defined by a "fields" array.
+const EXCHANGE_TICKERS_URL =
+  "https://www.sec.gov/files/company_tickers_exchange.json"
 
 // Module-level cache. Survives across invocations inside the same function
 // container. Fluid Compute reuses containers aggressively, so amortized
@@ -53,7 +59,7 @@ function normalizeCik(cik: string | number | null | undefined): string | null {
   return s.replace(/^0+/, "") || "0"
 }
 
-async function fetchMap(): Promise<TickerMap> {
+async function fetchPrimaryMap(): Promise<TickerMap> {
   const res = await fetchWithRetry(COMPANY_TICKERS_URL, {
     headers: {
       "User-Agent": politeUserAgent("SecCikTickerMapper"),
@@ -75,6 +81,91 @@ async function fetchMap(): Promise<TickerMap> {
     map.set(cik, ticker)
   }
   return map
+}
+
+type ExchangeTickersPayload = {
+  // Shape: { fields: ["cik","name","ticker","exchange"], data: [[1045810,"NVIDIA","NVDA","Nasdaq"], ...] }
+  fields?: string[]
+  data?: Array<Array<string | number | null>>
+}
+
+/**
+ * fetchExchangeMap — broader SEC file that includes foreign ADRs + OTC listings
+ * missing from company_tickers.json. Shape is column-oriented; we reconstruct
+ * a flat CIK → ticker map after looking up the indices of the 'cik' and
+ * 'ticker' columns.
+ */
+async function fetchExchangeMap(): Promise<TickerMap> {
+  const res = await fetchWithRetry(EXCHANGE_TICKERS_URL, {
+    headers: {
+      "User-Agent": politeUserAgent("SecCikTickerMapper"),
+      "Accept-Encoding": "gzip, deflate",
+      Accept: "application/json",
+    },
+  })
+  if (!res.ok) {
+    throw new Error(
+      `company_tickers_exchange.json returned ${res.status} ${res.statusText}`
+    )
+  }
+  const json = (await res.json()) as ExchangeTickersPayload
+  const fields = json.fields ?? []
+  const data = json.data ?? []
+  const cikIdx = fields.findIndex((f) => f.toLowerCase() === "cik")
+  const tickerIdx = fields.findIndex((f) => f.toLowerCase() === "ticker")
+  if (cikIdx === -1 || tickerIdx === -1) {
+    throw new Error(
+      "company_tickers_exchange.json missing expected 'cik' or 'ticker' column"
+    )
+  }
+  const map: TickerMap = new Map()
+  for (const row of data) {
+    const cik = normalizeCik(row[cikIdx] as string | number | null)
+    const tickerRaw = row[tickerIdx]
+    const ticker = typeof tickerRaw === "string" ? tickerRaw.trim().toUpperCase() : null
+    if (!cik || !ticker) continue
+    map.set(cik, ticker)
+  }
+  return map
+}
+
+/**
+ * fetchMap — combine the primary + exchange files. Primary takes precedence
+ * (narrower but higher-quality "primary ticker" signal). Exchange fills in
+ * foreign ADRs + OTC listings that the primary file omits.
+ */
+async function fetchMap(): Promise<TickerMap> {
+  const [primary, exchange] = await Promise.allSettled([
+    fetchPrimaryMap(),
+    fetchExchangeMap(),
+  ])
+  const merged: TickerMap = new Map()
+
+  // Exchange goes first so primary can overwrite when both have the same CIK
+  // (primary represents the canonical "primary ticker" for the issuer).
+  if (exchange.status === "fulfilled") {
+    for (const [cik, ticker] of exchange.value) merged.set(cik, ticker)
+  } else {
+    console.warn(
+      "[sec-cik-ticker] exchange map fetch failed:",
+      exchange.reason instanceof Error ? exchange.reason.message : exchange.reason
+    )
+  }
+  if (primary.status === "fulfilled") {
+    for (const [cik, ticker] of primary.value) merged.set(cik, ticker)
+  } else {
+    console.warn(
+      "[sec-cik-ticker] primary map fetch failed:",
+      primary.reason instanceof Error ? primary.reason.message : primary.reason
+    )
+  }
+
+  if (merged.size === 0) {
+    throw new Error(
+      "both SEC ticker maps failed to fetch — cannot resolve any CIK"
+    )
+  }
+  return merged
 }
 
 async function getMap(): Promise<TickerMap> {

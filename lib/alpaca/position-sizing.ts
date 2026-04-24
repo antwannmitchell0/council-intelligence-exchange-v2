@@ -1,15 +1,20 @@
 // Position sizing for paper orders.
 //
-// Tonight's policy (Phase 4) is deliberately boring: fixed 1% of paper NAV
-// per signal, capped at $5,000 absolute. Kelly-sizing and volatility-adjusted
-// sizing live in the `confidential-agent-playbook` skill and land later once
-// the broker-paper track has enough fills to estimate edge per agent.
+// Phase 4 policy: fixed fractional-NAV sizing. Kelly-sizing lives in
+// `confidential-agent-playbook` skill — ships once broker-paper has
+// enough fills per agent to estimate edge.
+//
+// 2026-04-24: lowered from 0.01 (1%) to 0.0025 (0.25%) alongside EDGAR
+// pagination. At 1% × $925/order, the $77k buying power saturated
+// after ~83 orders — below realistic Form 4 daily volume. At 0.25%
+// (~$232/order) we can place ~330 orders before buying power
+// constrains, comfortably above typical daily filing volume.
 
 import "server-only"
 
-export const DEFAULT_TARGET_WEIGHT = 0.01 // 1% of paper NAV
-export const MAX_NOTIONAL_USD = 5_000      // absolute cap per order
-export const MIN_NOTIONAL_USD = 1          // Alpaca minimum
+export const DEFAULT_TARGET_WEIGHT = 0.0025 // 0.25% of paper NAV
+export const MAX_NOTIONAL_USD = 5_000       // absolute cap per order
+export const MIN_NOTIONAL_USD = 1           // Alpaca minimum
 
 export type NotionalResult = {
   notional: number          // dollars, rounded to 2dp
