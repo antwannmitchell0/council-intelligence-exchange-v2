@@ -6,6 +6,48 @@
 
 ---
 
+## 🎉 0b · PHASE A/B/C PARTIAL SHIP — BUYER-READY HANDOVER LIVE (2026-04-24 later same day)
+
+After closing Phase 4, we executed a buyer-readiness sprint in response to an investor's security-due-diligence checklist. Delivered:
+
+**11 new operational docs** (all linked from `docs/OPERATING-MANUAL.md`):
+- `OPERATING-MANUAL.md` — spine/master handover, file-by-file index
+- `DUE-DILIGENCE.md` — every investor-checklist item answered (✅/🟡/🔵/⚪)
+- `ARCHITECTURE.md` — 5-layer walkthrough + end-to-end data-flow example
+- `ROLE-MODEL.md` — RBAC + table sensitivity matrix (Phase D ready)
+- `SECURITY.md` — public posture, responsible disclosure, IR runbook
+- `KNOWN-LIMITATIONS.md` — honest tech-debt inventory
+- `ONBOARDING.md` — new-engineer day-1 walkthrough
+- `ROADMAP.md` — Phases A-F master punch list
+- `LEGAL/PRIVACY-POLICY.md`, `LEGAL/TERMS-OF-SERVICE.md`, `LEGAL/DATA-PROCESSING-AGREEMENT.md` — templates pending counsel review
+
+**Phase A code** (Day-0 depth):
+- SEC CIK→ticker resolver now consults both `company_tickers.json` AND `company_tickers_exchange.json` — rescues foreign ADRs like Sea Ltd.
+- insider-filing-agent paginates EDGAR search-index (was capped at 100 hits/run; now captures the full 72h window with EDGAR_MAX_TOTAL=2000 safety cap).
+- Per-order sizing lowered from 1% NAV → 0.25% NAV so pagination doesn't saturate buying power.
+
+**Phase B code** (operational hardening):
+- `GET /api/health` — public uptime endpoint. Returns JSON with per-check diagnostics for Supabase, Alpaca, SEC EDGAR. Point any uptime monitor at it (UptimeRobot, Better Uptime, Pingdom — all free tiers).
+- Smoke-tested live: all three services green at 2026-04-24 deployment.
+
+**Phase C code** (site + legal polish):
+- `/legal/privacy`, `/legal/terms`, `/security` — public-facing pages summarizing the full templates in `docs/LEGAL/`
+- `components/legal-footer.tsx` — adds Privacy / Terms / Security links in the Legal column (footer already rendered globally via `app/layout.tsx`)
+- `@vercel/analytics` wired globally
+
+**Shipped via PR #11** on 2026-04-24.
+
+### What deliberately did NOT ship this session
+
+- **Floor UI upgrade** — user requested the current `/floor` design get "little people walking around" enhancements. Captured as Phase C item in `docs/ROADMAP.md` §C; not pivoted to mid-sprint to avoid scope blowup.
+- **Stripe / Auth / admin dashboard** — entirely Phase D, unchanged from the original plan.
+- **congress-agent replacement source** — needs research; Phase A next session.
+- **thirteen-f CUSIP→ticker** — needs OpenFIGI integration; Phase A next session.
+- **Macro agent ETF-proxy mappings** — needs FRED_API_KEY from operator; Phase A next session.
+- **Counsel review of Privacy/ToS/DPA** — operator action, not technical.
+
+---
+
 ## 🎉 0 · PHASE 4 COMPLETE — DAY 0 LANDED 2026-04-24
 
 **The 90-day broker-paper-tracking clock is running.**
