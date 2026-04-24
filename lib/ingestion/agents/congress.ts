@@ -33,7 +33,28 @@ import "server-only"
 import { BaseIngestionAgent } from "../base-agent"
 import { buildExternalId } from "../dedup"
 import { fetchWithRetry, RateLimiter } from "../http"
-import type { NormalizedSignal, RawSignal } from "../types"
+import type { NormalizedSignal, OrderSide, RawSignal } from "../types"
+
+// Senate Stock Watcher's `type` field is free-text but converges on a few
+// canonical strings. Map defensively — unknown values return null so the
+// router skips rather than guessing wrong.
+function parseSide(transactionType: string): OrderSide | null {
+  const t = transactionType.toLowerCase()
+  if (t.includes("purchase") || t.startsWith("buy")) return "buy"
+  if (t.includes("sale") || t.startsWith("sell")) return "sell"
+  return null
+}
+
+function normalizeTicker(raw: string | null): string | null {
+  if (!raw) return null
+  const t = raw.trim().toUpperCase()
+  if (!t || t === "--" || t === "N/A") return null
+  // Alpaca doesn't trade non-US tickers; the community feed occasionally
+  // emits things like "BRK.B" — that's valid Alpaca symbol format.
+  // Filter anything with whitespace or obvious junk.
+  if (/\s/.test(t)) return null
+  return t
+}
 
 const SOURCE_ID = "senate-stock-watcher"
 const AGENT_ID = "congress-agent"
@@ -165,6 +186,9 @@ export class CongressAgent extends BaseIngestionAgent {
         asset_description: p.asset_description,
       })
 
+      const symbol = normalizeTicker(p.ticker)
+      const side = parseSide(p.transaction_type)
+
       out.push({
         agent_id: AGENT_ID,
         source_id: SOURCE_ID,
@@ -173,6 +197,9 @@ export class CongressAgent extends BaseIngestionAgent {
         confidence: null,
         source_url: "https://senatestockwatcher.com",
         status: "pending",
+        symbol,
+        side: symbol ? side : null,
+        target_weight: null,
       })
     }
     return out

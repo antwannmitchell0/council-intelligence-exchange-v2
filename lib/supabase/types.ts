@@ -22,6 +22,15 @@ export type EarlyAccessRequestRow = {
   created_at: string
 }
 
+export type StageTag =
+  | "pending"
+  | "backtest-verified"
+  | "broker-paper-tracking"
+  | "live-verified"
+  | "live-trading"
+
+export type OrderSide = "buy" | "sell"
+
 export type SignalRow = {
   id: string
   agent_id: string
@@ -30,6 +39,41 @@ export type SignalRow = {
   source_url: string | null
   created_at: string
   status: VerificationStatus
+  symbol: string | null
+  side: OrderSide | null
+  target_weight: number | null
+  stage_tag: StageTag
+  source_id: string | null
+  external_id: string | null
+}
+
+export type TradeTicketStatus =
+  | "submitted"
+  | "accepted"
+  | "filled"
+  | "partially_filled"
+  | "canceled"
+  | "rejected"
+  | "expired"
+
+export type TradeTicketRow = {
+  id: string
+  signal_id: string
+  agent_id: string
+  alpaca_order_id: string | null
+  client_order_id: string
+  symbol: string
+  side: OrderSide
+  qty: number | null
+  notional: number | null
+  filled_avg_price: number | null
+  order_status: TradeTicketStatus
+  submitted_at: string | null
+  filled_at: string | null
+  broker: string
+  raw: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
 }
 
 export type LeaderboardRow = {
@@ -156,6 +200,18 @@ export type Database = {
           created_at?: string
         }
         Update: Partial<EarlyAccessRequestRow>
+      }
+      v2_trade_tickets: {
+        Row: TradeTicketRow
+        Insert: Partial<TradeTicketRow> & {
+          signal_id: string
+          agent_id: string
+          client_order_id: string
+          symbol: string
+          side: OrderSide
+          order_status: TradeTicketStatus
+        }
+        Update: Partial<TradeTicketRow>
       }
     }
   }
