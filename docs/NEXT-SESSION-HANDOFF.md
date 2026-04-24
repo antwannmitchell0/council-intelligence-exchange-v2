@@ -159,10 +159,21 @@ Add these to Vercel production env:
 |---|---|---|
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Settings → API → service_role secret (POST-ROTATION) | Server-side ingestion writes bypass RLS |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Settings → API → anon key (POST-ROTATION) | Replace the currently-set value |
-| `ALPACA_API_KEY_ID` | alpaca.markets → signup → Paper trading tab | Broker paper-trading |
-| `ALPACA_API_SECRET` | Same as above | Broker secret |
+| `ALPACA_API_KEY_ID` | alpaca.markets → **Council Exchange** account → Paper Trading → API Keys | Broker paper-trading |
+| `ALPACA_API_SECRET` | Same place, same key pair (shown once at generate time) | Broker secret |
+| `ALPACA_WEBHOOK_SECRET` | Generate locally: `openssl rand -hex 32` | Auth for /api/alpaca/webhook |
 | `FRED_API_KEY` | fred.stlouisfed.org → My Account → API Keys | Macro data |
 | `SEC_USER_AGENT` | Just a string like `"Council Intelligence antwannmitchell0@gmail.com"` | SEC EDGAR polite-scraping requirement |
+
+### 🔴 Alpaca account-separation rule — non-negotiable
+
+The owner runs multiple Alpaca accounts (**Council Exchange** and **Demm Money Machine**, as of 2026-04-23). **Only the Council Exchange account's paper keys may be used here.** Reasons:
+
+1. **Integrity math depends on it.** The 90-day broker-paper clock and the Phase 5 integrity-audit cron (rolling IC, Sharpe, win-rate) are computed from `v2_trade_tickets` fills. Any non-Council trade landing on that account silently contaminates every agent's stats. The "math gates everything" promise breaks.
+2. **Auditability.** When this flips to live trading (post-RIA registration), the broker account becomes customer-facing. One-account-per-product is the clean compliance story.
+3. **Safety at the code boundary.** `lib/alpaca/client.ts` already asserts the base URL contains `paper-api` so a live endpoint can't be hit by accident, but it CAN'T tell which Alpaca account a key belongs to. Discipline lives here, in the env-var step.
+
+If you later want Demm Money Machine to run its own agent stack, it gets its own project, its own Supabase, its own Vercel env. Never mix the keys.
 
 If the user doesn't have any one of these, that specific agent waits. Everything else proceeds.
 

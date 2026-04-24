@@ -6,6 +6,7 @@
 
 import "server-only"
 import { randomUUID } from "node:crypto"
+import { routeOrders } from "@/lib/alpaca/order-router"
 import { getServerClient } from "@/lib/supabase/server"
 import {
   readBreakerState,
@@ -17,6 +18,7 @@ import type {
   IngestionResult,
   IngestionStatus,
   NormalizedSignal,
+  PersistedSignal,
   RawSignal,
 } from "./types"
 
@@ -109,34 +111,39 @@ export abstract class BaseIngestionAgent {
     const deduplicated = dedupeByExternalId(normalized)
     const inMemoryDeduped = normalized.length - deduplicated.length
 
-    // Stage-tag every insert as `pending`. Graduation is a separate process.
+    // Stage-tag every insert as `pending`. Graduation is a separate process
+    // (Phase 4 order router promotes to `broker-paper-tracking` after fill).
     const rows = deduplicated.map((s) => ({
       agent_id: s.agent_id,
       body: s.body,
       confidence: s.confidence,
       source_url: s.source_url,
       status: "pending" as const,
-      // external_id / source_id are not yet in the strict `SignalRow` type —
-      // they live on the table via migration 0005. Cast once at the boundary.
-      ...({ external_id: s.external_id, source_id: s.source_id } as Record<
-        string,
-        unknown
-      >),
+      symbol: s.symbol ?? null,
+      side: s.side ?? null,
+      target_weight: s.target_weight ?? null,
+      stage_tag: "pending" as const,
+      external_id: s.external_id,
+      source_id: s.source_id,
     }))
 
     let ingested = 0
     let errors = 0
+    let persisted: PersistedSignal[] = []
 
     if (rows.length > 0) {
       const { data, error } = await supabase
         .from("v2_signals")
-        // Cast: `external_id` / `source_id` are added by migration 0005
-        // and are not yet reflected in the generated Database types.
+        // Cast: external_id / source_id added in migration 0005;
+        // symbol / side / target_weight / stage_tag added in migration 0010.
         .upsert(rows as never, {
           onConflict: "source_id,external_id",
           ignoreDuplicates: true,
         })
-        .select("id")
+        // Include external_id so we can reliably match inserted rows back
+        // to their source NormalizedSignal. Index-based zipping is wrong
+        // when duplicates live mid-batch — only new rows are returned.
+        .select("id, created_at, external_id")
 
       if (error) {
         errors = 1
@@ -155,11 +162,41 @@ export abstract class BaseIngestionAgent {
       }
 
       ingested = data?.length ?? 0
+
+      const returned = (data ?? []) as Array<{
+        id: string
+        created_at: string
+        external_id: string | null
+      }>
+      const byExternal = new Map<string, NormalizedSignal>()
+      for (const s of deduplicated) byExternal.set(s.external_id, s)
+      for (const r of returned) {
+        if (!r.external_id) continue
+        const src = byExternal.get(r.external_id)
+        if (!src) continue
+        persisted.push({ ...src, id: r.id, created_at: r.created_at })
+      }
     }
 
     // DB-enforced dedup count = (what we tried to insert) − (what was actually inserted)
     const dbDeduped = Math.max(0, deduplicated.length - ingested)
     const totalDeduped = inMemoryDeduped + dbDeduped
+
+    // Phase 4 order routing. Strict contract: a broken Alpaca session must
+    // never fail ingestion. Router catches its own errors and returns a
+    // result; we only surface the summary into warnings for visibility.
+    if (persisted.length > 0) {
+      try {
+        const routing = await routeOrders(persisted)
+        if (routing.submitted > 0 || routing.failed > 0) {
+          warnings.push(
+            `alpaca: submitted=${routing.submitted} failed=${routing.failed} skipped=${routing.skipped}`
+          )
+        }
+      } catch (err) {
+        warnings.push(`alpaca_router_threw: ${errMsg(err)}`)
+      }
+    }
 
     // Heartbeat — success path. `last_signal_id` intentionally omitted here;
     // keeping heartbeat writes cheap/idempotent during ingest.

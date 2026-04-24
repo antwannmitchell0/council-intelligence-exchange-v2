@@ -162,6 +162,12 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
         p.issuer_cik ?? ""
       }/${p.accession.replace(/-/g, "")}/${p.accession}-index.htm`
 
+      // Phase 4: Form 4 cluster buys are the core thesis for this agent;
+      // EDGAR search-index hits don't distinguish acquisitions from
+      // dispositions without a secondary filing fetch, so for Day-0 we
+      // assume `buy` and let the math gate filter false positives over
+      // the 90-day window. Upgrade path: parse transactionCode from the
+      // filing body and set side accordingly before live trading.
       out.push({
         agent_id: AGENT_ID,
         source_id: SOURCE_ID,
@@ -170,6 +176,9 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
         confidence: null,
         source_url,
         status: "pending",
+        symbol: p.issuer_ticker?.trim() || null,
+        side: p.issuer_ticker?.trim() ? "buy" : null,
+        target_weight: null,
       })
     }
     return out

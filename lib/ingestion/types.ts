@@ -30,7 +30,13 @@ export type RawSignal<TPayload = unknown> = {
  * NormalizedSignal — ready to be inserted into `v2_signals`.
  * `external_id` is the stable per-source identifier used for dedup
  * against the unique index `(source_id, external_id)`.
+ *
+ * Phase 4 fields (optional): when an agent's source reveals a tradable
+ * symbol + side, populate them here. The post-insert order router reads
+ * these columns to decide whether to route to broker-paper.
  */
+export type OrderSide = "buy" | "sell"
+
 export type NormalizedSignal = {
   agent_id: string
   source_id: string
@@ -39,6 +45,9 @@ export type NormalizedSignal = {
   confidence: number | null
   source_url: string | null
   status: VerificationStatus
+  symbol?: string | null
+  side?: OrderSide | null
+  target_weight?: number | null
 }
 
 /**

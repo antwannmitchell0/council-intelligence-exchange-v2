@@ -48,5 +48,10 @@ export const config: VercelConfig = {
     { path: "/api/cron/ingest?agent=wiki-edit-surge-agent", schedule: "30 9 * * *" },
     { path: "/api/cron/ingest?agent=etherscan-whale-agent", schedule: "0 11 * * *" },
     { path: "/api/cron/ingest?agent=clinical-trial-outcomes-agent", schedule: "0 12 * * *" },
+    // Phase 4 broker-paper reconciler. Daily cadence fits Vercel Hobby's
+    // 1/day cron limit; upgrade to Pro unlocks 15-min polling during
+    // US market hours — the spec we want long-term is:
+    //   schedule: "*/15 13-21 * * 1-5"   (9–4pm ET, weekdays, in UTC).
+    { path: "/api/cron/alpaca-poll", schedule: "0 21 * * *" },
   ],
 }
