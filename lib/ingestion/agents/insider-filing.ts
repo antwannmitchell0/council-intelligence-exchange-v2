@@ -53,8 +53,16 @@ type EdgarHit = {
 type EdgarSearchPayload = {
   hits?: {
     hits?: EdgarHit[]
+    total?: { value?: number; relation?: string }
   }
 }
+
+// EDGAR's search-index default is 10 hits/page but accepts higher sizes up
+// to ~100 before it starts truncating. We paginate at 100 and cap total at
+// 2000 to avoid runaway loops on bad data; typical daily Form 4 volume is
+// 100-300 so 2000 is 10x safety margin.
+const EDGAR_PAGE_SIZE = 100
+const EDGAR_MAX_TOTAL = 2000
 
 type Form4Payload = {
   accession: string
@@ -101,31 +109,52 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
     const end = new Date()
     const start = new Date(end.getTime() - 72 * 60 * 60 * 1000)
 
-    const params = new URLSearchParams({
+    const baseParams = {
       forms: "4",
       dateRange: "custom",
       startdt: isoDate(start),
       enddt: isoDate(end),
-    })
-
-    await edgarLimiter.take()
-
-    const res = await fetchWithRetry(`${SEARCH_URL}?${params.toString()}`, {
-      headers: {
-        "User-Agent": politeUserAgent("InsiderFilingAgent"),
-        "Accept-Encoding": "gzip, deflate",
-        Accept: "application/json",
-      },
-    })
-
-    if (!res.ok) {
-      throw new Error(
-        `EDGAR search-index returned ${res.status} ${res.statusText}`
-      )
     }
 
-    const json = (await res.json()) as EdgarSearchPayload
-    const hits = json.hits?.hits ?? []
+    // Paginate through EDGAR's search-index until we've retrieved every hit
+    // in the date window OR hit our safety cap. Default size is low; we
+    // request 100 per page.
+    const hits: EdgarHit[] = []
+    let from = 0
+    let totalReported: number | undefined
+
+    while (from < EDGAR_MAX_TOTAL) {
+      const params = new URLSearchParams({
+        ...baseParams,
+        from: String(from),
+        size: String(EDGAR_PAGE_SIZE),
+      })
+      await edgarLimiter.take()
+      const res = await fetchWithRetry(`${SEARCH_URL}?${params.toString()}`, {
+        headers: {
+          "User-Agent": politeUserAgent("InsiderFilingAgent"),
+          "Accept-Encoding": "gzip, deflate",
+          Accept: "application/json",
+        },
+      })
+      if (!res.ok) {
+        throw new Error(
+          `EDGAR search-index returned ${res.status} ${res.statusText} at from=${from}`
+        )
+      }
+      const json = (await res.json()) as EdgarSearchPayload
+      const pageHits = json.hits?.hits ?? []
+      if (totalReported === undefined) {
+        totalReported = json.hits?.total?.value ?? pageHits.length
+      }
+      hits.push(...pageHits)
+
+      // Stop conditions: page returned < page size, OR we've reached the
+      // reported total, OR we hit our safety cap.
+      if (pageHits.length < EDGAR_PAGE_SIZE) break
+      if (totalReported !== undefined && hits.length >= totalReported) break
+      from += EDGAR_PAGE_SIZE
+    }
 
     // Make sure the mapper is warm before we resolve per-row.
     await preload

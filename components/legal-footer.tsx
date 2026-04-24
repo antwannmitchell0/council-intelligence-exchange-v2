@@ -13,6 +13,12 @@ const quickLinks: { href: string; label: string; external?: boolean }[] = [
   },
 ]
 
+const legalLinks: { href: string; label: string }[] = [
+  { href: "/legal/privacy", label: "Privacy" },
+  { href: "/legal/terms", label: "Terms" },
+  { href: "/security", label: "Security" },
+]
+
 export function LegalFooter() {
   return (
     <footer
@@ -89,6 +95,18 @@ export function LegalFooter() {
               integrity contract. Auto-retirement is active. Past performance
               is not indicative of future results.
             </p>
+            <ul className="mt-1 flex flex-wrap gap-x-5 gap-y-2">
+              {legalLinks.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="mono text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:text-ink"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 
