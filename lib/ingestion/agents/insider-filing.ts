@@ -93,10 +93,13 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
       // ingests the signal (just without a tradable symbol).
     })
 
-    // Pull filings from the last 24h; cron is 6-hourly so there is
-    // generous overlap. Dedup via accession number handles any overlap.
+    // Pull filings from the last 72h. Hobby cron cadence is daily (1x/day),
+    // so a 3-day window guarantees every filing is seen at least twice
+    // before it ages out — resilient to individual cron misses and
+    // EDGAR downtime. Accession-based dedup (unique index on
+    // source_id, external_id) keeps the write volume flat.
     const end = new Date()
-    const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+    const start = new Date(end.getTime() - 72 * 60 * 60 * 1000)
 
     const params = new URLSearchParams({
       forms: "4",

@@ -39,7 +39,10 @@ export const config: VercelConfig = {
     // Upgrade to Pro unlocks sub-daily cadence for the time-sensitive sources.
     { path: "/api/cron/ingest?agent=insider-filing-agent", schedule: "0 7 * * *" },
     { path: "/api/cron/ingest?agent=thirteen-f-agent", schedule: "15 7 * * *" },
-    { path: "/api/cron/ingest?agent=congress-agent", schedule: "30 7 * * *" },
+    // congress-agent cron disabled 2026-04-24 — upstream (senatestockwatcher.com)
+    // went offline permanently; domain no longer resolves. Re-enable after wiring
+    // an alternative source (efdsearch.senate.gov direct, or a maintained data mirror).
+    // { path: "/api/cron/ingest?agent=congress-agent", schedule: "30 7 * * *" },
     { path: "/api/cron/ingest?agent=yield-curve-agent", schedule: "0 8 * * *" },
     { path: "/api/cron/ingest?agent=jobs-data-agent", schedule: "15 8 * * *" },
     { path: "/api/cron/ingest?agent=fed-futures-agent", schedule: "30 8 * * *" },
