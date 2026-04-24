@@ -1,8 +1,47 @@
 # THE COUNCIL INTELLIGENCE EXCHANGE v2 — SESSION HANDOFF
 
 **Owner:** Antwann Mitchell (antwannmitchell0@gmail.com)
-**Handoff date:** 2026-04-23
-**Next session goal:** Execute Phase 4+ — "The Unthinkable Night" — build the full ingestion framework, wire all 8 trading specialist pipelines, integrate Alpaca paper-trading, ship promotion automation, and promote 15 of 24 agents to verified status (operational + backtest-verified) before sunrise.
+**Last updated:** 2026-04-24 (post-Phase-4)
+**Original handoff date:** 2026-04-23
+
+---
+
+## 🎉 0 · PHASE 4 COMPLETE — DAY 0 LANDED 2026-04-24
+
+**The 90-day broker-paper-tracking clock is running.**
+
+| Phase 4 outcome | Status |
+|---|---|
+| Alpaca paper-trading integration | ✅ Live. Council Exchange account auth'd, $92k+ paper equity |
+| `v2_trade_tickets` ledger | ✅ Created (migration 0010), first 81 rows landed |
+| `stage_tag` column on `v2_signals` | ✅ Created with 5-stage CHECK constraint |
+| CIK → ticker resolver (SEC company_tickers.json) | ✅ Deployed, cache-warm on cold start |
+| insider-filing-agent cron | ✅ **Day 0: 81 paper orders submitted, 0 failures, 13 rejected by Alpaca (halted/non-fractionable — expected)** |
+| Order router inline in `BaseIngestionAgent.run()` | ✅ With dedicated circuit breaker, PDT guard, 1%/$5k sizing |
+| `/api/alpaca/webhook` + `/api/cron/alpaca-poll` | ✅ Webhook-secret auth, reconciler cron wired |
+| Supabase JWT rotation + sb_publishable/sb_secret migration | ✅ Old leaked JWT invalidated, new-format keys live in Vercel |
+| `docs/ALPACA-REFERENCE.md` | ✅ Committed |
+| `docs/SUPABASE-REFERENCE.md` | ✅ Committed |
+| `docs/VERCEL-PROJECT-REFERENCE.md` | ✅ Committed |
+| `docs/STAGE-TAXONOMY.md` | ✅ Committed |
+| `docs/SECRETS-ROTATION-PLAYBOOK.md` | ✅ Committed (captures tonight's CLI + dashboard gotchas) |
+| Migrations 0010 (Alpaca schema), 0011 (dedup index fix), 0012 (dedup named constraint), 0013 (v2_agents + v2_sources seed for ingestion) | ✅ All applied to prod |
+
+**Gotchas resolved tonight that future sessions should NOT repeat:**
+
+1. **`vercel env add` interactive prompt silently accepts empty values** — always verify length post-add.
+2. **`vercel env rm <name> <scope>` removes the entire record** when the var is cross-scope — always add with production only.
+3. **Dashboard Key/Value field order trap** — pasting a secret into the "Key" (name) field is a valid but disastrous action; Vercel stores it as a variable name. If you see a variable named `sb_secret_...` in the list, delete it immediately and re-add correctly.
+4. **Legacy JWT `eyJ...` keys are DISABLED on this Supabase project.** Use only `sb_publishable_` / `sb_secret_` keys. Env vars consumed: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`. Anything with `_ANON_KEY` or `_SERVICE_ROLE_KEY` in the name is vestigial — code's fallback chain handles both but new deploys should use the sb_ names.
+5. **PostgREST needs a NAMED UNIQUE CONSTRAINT** for upsert `ON CONFLICT`, not a bare unique index. If you ever add a new dedup index, use `ALTER TABLE ... ADD CONSTRAINT ... UNIQUE (...)`, not `CREATE UNIQUE INDEX`.
+6. **EDGAR search-index Form 4 hits have `ciks[0]` = reporter, `ciks[1]` = issuer.** Always index `[1]` for the tradable CIK. Same pattern applies to `display_names` (filer first, issuer second).
+7. **Alpaca paper account `PA39JANBONYK` is the Council Exchange account.** Never use Demm Money Machine. Integrity math depends on a clean per-product account.
+
+See `docs/ALPACA-REFERENCE.md`, `docs/SECRETS-ROTATION-PLAYBOOK.md`, and `docs/STAGE-TAXONOMY.md` for the operational deep-dives.
+
+---
+
+**Next session goal:** Wire the remaining 9 ingestion agents with the same CIK/symbol-resolution pattern proven tonight, then run Phase 1.5 backtest-verified promotions on v1 historical data. Phase 4 infrastructure is done; Phase 3+5+6a is next.
 
 ---
 
@@ -342,14 +381,74 @@ The build is 90% infrastructure-ready. The next session is about igniting it, ho
 
 ## 13 · HOW TO START THE NEXT SESSION
 
+**DO NOT re-run JWT rotation, Alpaca setup, or Phase 4 migrations. All done.** If a session suggests otherwise, it hasn't read §0 above.
+
 Open a new Claude Code session in:
 ```
 /Users/antwannmitchellsr/The Council Intelligence Exchange/The Council Intelligence Exchange v2
 ```
 
 First message should be:
-> Read docs/NEXT-SESSION-HANDOFF.md and confirm you understand. Then execute Phase 4+ as described. Load the skills listed in Section 10. Start by rotating the service_role key with me, then proceed through the plan non-stop with parallel subagents where safe.
 
-That's the ignition key.
+> Read docs/NEXT-SESSION-HANDOFF.md §0 first — Phase 4 is COMPLETE as of 2026-04-24. Day 0 is logged. Do NOT suggest re-doing JWT rotation or Alpaca keys — those are done. Then read `docs/STAGE-TAXONOMY.md`, `docs/ALPACA-REFERENCE.md`, `docs/SECRETS-ROTATION-PLAYBOOK.md`, `docs/SUPABASE-REFERENCE.md`, `docs/VERCEL-PROJECT-REFERENCE.md` so you have the current state in context. Then pick up from §14 (what's left) and propose an execution order.
+
+Skills to invoke at start of session (unchanged):
+- `confidential-agent-playbook`
+- `quant-signal-validator`
+- `council-regulatory-compliance`
+- `alt-data-licensing`
+- `council-design-language`
+- `senior-product-engineer`
+- `apple-grade-designer`
+- Vercel plugins: `nextjs`, `vercel-functions`, `workflow`, `runtime-cache`, `env-vars`, `deploy`
+
+---
+
+## 14 · WHAT'S LEFT (PUNCH LIST AS OF 2026-04-24)
+
+### 🔴 High-priority next session (ignition-critical)
+
+1. **Wire the remaining 9 ingestion agents with symbol extraction** — insider-filing is live; copy the same CIK→ticker pattern to the others where applicable:
+   - `thirteen-f-agent` — same `ciks[1]` issue as insider-filing. Apply the same fix. *Warning: 13F holdings come from a secondary fetch of the filing body XML, not the search-index.*
+   - `congress-agent` — payload already has `ticker` directly. Upstream (Senate Stock Watcher) was DOWN at last check (2026-04-24 fetch timed out at 15s). Add retry-with-fallback or find an alt source.
+   - `yield-curve-agent` — macro. Needs ETF-proxy mapping (TLT/SHY).
+   - `jobs-data-agent` — macro. Needs ETF-proxy mapping (SPY or sector).
+   - `fed-futures-agent` — macro. Needs ETF-proxy mapping (SHY/TBF).
+   - `gdelt-event-volume-agent` — event volume. Signal → symbol mapping is research-heavy (country/sector lookup).
+   - `wiki-edit-surge-agent` — needs entity → ticker mapping.
+   - `etherscan-whale-agent` — crypto. Alpaca crypto is separate endpoint; re-test wallet → symbol path.
+   - `clinical-trial-outcomes-agent` — trial → sponsor ticker mapping.
+
+2. **Phase 1.5 backtest-verified promotions** — v1 has 1,648 historical signals in `intelligence_signals`. Compute IC per agent, promote those passing IC≥0.10 + t>2 + n≥50 to `backtest-verified`. Expected: 6–8 agents qualify (see original §4 for the list).
+
+3. **Phase 5 integrity-audit cron validation** — `/api/cron/integrity-audit` is already wired in code (`lib/integrity/audit.ts`). Fire it manually once the first ingest batch ages ~1 day, confirm it correctly no-ops on too-thin data.
+
+### 🟠 Operational (address when it bites)
+
+4. **Monitoring/alerting for cron failures** — no alarms today. A silently-failing cron corrupts the 90-day clock. Add Sentry + Vercel log drain + PagerDuty (or cheaper: a Slack webhook in each catch-block).
+5. **Re-fetch trigger for EDGAR retries** — if SEC is down for a day, we lose that day's signals. Add a backfill endpoint that accepts `(agent, startDate, endDate)` and re-ingests.
+6. **Signal → `v2_directional_signals` wiring** — the directional table is underused. Populate alongside `v2_signals` so the leaderboard reflects agent-level direction stats.
+7. **Backfill the 19 insider-filing signals that skipped** — 6 had no resolvable symbol, 13 rejected by Alpaca. Investigate each to ensure the router's reasons are legit (not a bug).
+
+### 🟡 Quality / hygiene (track, don't let rot)
+
+8. **`thirteen-f-agent` symbol extraction** (secondary EDGAR body fetch — separate work from just updating `ciks[1]`).
+9. **Anti-abuse hardening** on `/api/marketplace/early-access` — Turnstile, honeypot, Resend email notification (already in `lib/anti-abuse/` but not all enforced).
+10. **Vercel Analytics wire-up** — free, one env var.
+11. **Methodology page** (`/intelligence`) upgrade — currently v1.
+12. **Legal footer** — disclaimer language per `council-regulatory-compliance` skill (publisher's exemption, no individualized advice).
+13. **Lighthouse + AAA contrast audit** on all surfaces.
+14. **Live-trading flip** — blocked on RIA registration. See `docs/ALPACA-REFERENCE.md` "Upgrade path (post-RIA)".
+15. **Kelly position sizing** — currently 1%/$5k fixed. Kelly lives in `confidential-agent-playbook` skill; wire in once 30+ fills give enough edge estimation.
+
+### ✅ Done this session (do not redo)
+
+- Phase 4 Alpaca integration (migration 0010, lib/alpaca/*, webhook, poll cron)
+- Dedup constraint fixes (migrations 0011, 0012)
+- v2_agents + v2_sources ingestion seeds (migration 0013)
+- CIK → ticker resolver + insider-filing fix
+- Supabase JWT rotation + sb_ key migration
+- 5 reference docs (Alpaca, Supabase, Vercel, Stage Taxonomy, Secrets Rotation)
+- 81 paper orders placed = Day 0 logged
 
 *End of handoff.*
