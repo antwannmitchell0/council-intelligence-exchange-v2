@@ -27,6 +27,7 @@ import "server-only"
 import { BaseIngestionAgent } from "../base-agent"
 import { buildExternalId } from "../dedup"
 import { fetchWithRetry, politeUserAgent, RateLimiter } from "../http"
+import { lookupTicker, preloadTickerMap } from "../sec-cik-ticker"
 import type { NormalizedSignal, RawSignal } from "../types"
 
 const SOURCE_ID = "sec-edgar-form4"
@@ -84,6 +85,14 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
   protected async fetch(): Promise<RawSignal[]> {
     assertSecEnv()
 
+    // Warm the CIK→ticker map in parallel with the filing fetch. First call
+    // inside a cold container pulls ~15k-row company_tickers.json once;
+    // every subsequent call is a Map.get() at ~microsecond cost.
+    const preload = preloadTickerMap().catch(() => {
+      // Non-fatal — lookupTicker() falls back to null per-row, agent still
+      // ingests the signal (just without a tradable symbol).
+    })
+
     // Pull filings from the last 24h; cron is 6-hourly so there is
     // generous overlap. Dedup via accession number handles any overlap.
     const end = new Date()
@@ -115,16 +124,28 @@ export class InsiderFilingAgent extends BaseIngestionAgent {
     const json = (await res.json()) as EdgarSearchPayload
     const hits = json.hits?.hits ?? []
 
+    // Make sure the mapper is warm before we resolve per-row.
+    await preload
+
     const out: RawSignal<Form4Payload>[] = []
     for (const hit of hits) {
       const src = hit._source
       const accession = src?.adsh ?? hit._id
       if (!accession) continue
 
+      // EDGAR's search-index populates `tickers` inconsistently for Form 4
+      // (filings are indexed by the reporting person, not the issuer).
+      // Fall back to the CIK→ticker map so the order router has a
+      // tradable symbol.
+      const issuerCik = src?.ciks?.[0] ?? null
+      const indexedTicker = src?.tickers?.[0] ?? null
+      const resolvedTicker =
+        indexedTicker ?? (issuerCik ? await lookupTicker(issuerCik) : null)
+
       const payload: Form4Payload = {
         accession,
-        issuer_cik: src?.ciks?.[0] ?? null,
-        issuer_ticker: src?.tickers?.[0] ?? null,
+        issuer_cik: issuerCik,
+        issuer_ticker: resolvedTicker,
         reporting_person: src?.display_names?.[0] ?? null,
         form: src?.form ?? "4",
         file_date: src?.file_date ?? null,
