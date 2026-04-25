@@ -25,27 +25,33 @@ type CheckResult = {
   name: string
   ok: boolean
   latency_ms: number
+  // Non-critical checks (e.g., upstream third parties) report failure but
+  // do NOT gate the overall `ok` boolean. Use this to track upstream health
+  // without false-positive alerting on the platform.
+  critical: boolean
   detail?: string
 }
 
 async function timeIt<T>(
   name: string,
   fn: () => Promise<T>,
-  timeoutMs = 5000
+  options: { timeoutMs?: number; critical?: boolean } = {}
 ): Promise<CheckResult> {
+  const { timeoutMs = 5000, critical = true } = options
   const start = Date.now()
   try {
     const timer = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("timeout")), timeoutMs)
     )
     await Promise.race([fn(), timer])
-    return { name, ok: true, latency_ms: Date.now() - start }
+    return { name, ok: true, latency_ms: Date.now() - start, critical }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
     return {
       name,
       ok: false,
       latency_ms: Date.now() - start,
+      critical,
       detail,
     }
   }
@@ -83,18 +89,27 @@ async function checkAlpaca(): Promise<CheckResult> {
 }
 
 async function checkSecEdgar(): Promise<CheckResult> {
-  return timeIt("sec-edgar", async () => {
-    const res = await fetch(
-      "https://efts.sec.gov/LATEST/search-index?forms=4&size=1",
-      {
-        headers: {
-          "User-Agent":
-            process.env.SEC_USER_AGENT ?? "Council Health Check health@example.com",
-        },
-      }
-    )
-    if (!res.ok) throw new Error(`edgar_${res.status}`)
-  })
+  return timeIt(
+    "sec-edgar",
+    async () => {
+      const res = await fetch(
+        "https://efts.sec.gov/LATEST/search-index?forms=4&size=1",
+        {
+          headers: {
+            "User-Agent":
+              process.env.SEC_USER_AGENT ?? "Council Health Check health@example.com",
+          },
+        }
+      )
+      if (!res.ok) throw new Error(`edgar_${res.status}`)
+    },
+    // SEC EDGAR's full-text search legitimately takes 2-7s in normal
+    // operation; bump the timeout to 10s so we don't false-positive on
+    // EDGAR slowness. Marked non-critical because EDGAR being slow is
+    // upstream weather, not platform degradation — affects only one
+    // ingestion job, not site availability.
+    { timeoutMs: 10000, critical: false }
+  )
 }
 
 function logEvent(event: string, data: Record<string, unknown>): void {
@@ -117,7 +132,10 @@ export async function GET() {
   ])
 
   const checks = [supabase, alpaca, edgar]
-  const ok = checks.every((c) => c.ok)
+  // `ok` reflects platform health for uptime monitors. Non-critical checks
+  // (e.g., SEC EDGAR upstream) are tracked but do not gate `ok` — their
+  // status appears in the `checks` array for diagnostics regardless.
+  const ok = checks.filter((c) => c.critical).every((c) => c.ok)
 
   // Structured log: always record total, but only surface warn-level on
   // failure to keep the signal-to-noise ratio high for log drains.
