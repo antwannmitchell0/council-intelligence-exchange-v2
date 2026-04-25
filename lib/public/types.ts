@@ -41,6 +41,17 @@ export type PublicAgentEntry = {
   signals_lifetime: number
   hours_since_last_signal: number | null
   hours_since_heartbeat: number | null
+  // Below: scaffolded for the floor 3D rework (plan
+  // /Users/antwannmitchellsr/.claude/plans/title-the-council-stays-cheeky-engelbart.md).
+  // Optional today so the existing fetcher still satisfies the type;
+  // promote to required once getPublicAgentRoster() is extended.
+  //
+  // Most recent signal body — TEXT column containing JSON. Parsed into a
+  // human-readable snippet by the consumer (detail panel, speech bubble).
+  last_signal_body?: string | null
+  // Lifetime order counts from v2_trade_tickets (any status / filled).
+  orders_submitted_lifetime?: number
+  orders_filled_lifetime?: number
 }
 
 /** Format a "Xh ago" / "Xd ago" string from hours-since. Pure — safe on the client. */
