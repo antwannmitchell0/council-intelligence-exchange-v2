@@ -12,6 +12,14 @@
 
 import { redirect } from "next/navigation"
 import { isAdminAuthed } from "@/lib/admin/auth"
+import {
+  formatRelative,
+  getAgentFleetStatus,
+  getHealthStatus,
+  type AgentFleetEntry,
+  type AgentTier,
+  type HealthStatus,
+} from "@/lib/admin/status"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -198,6 +206,118 @@ const sections: Section[] = [
   },
 ]
 
+// ---- Live status panels --------------------------------------------------
+
+const TIER_META: Record<AgentTier, { dot: string; ring: string; label: string }> = {
+  fresh: { dot: "bg-emerald-400", ring: "ring-emerald-400/20", label: "fresh" },
+  stale: { dot: "bg-amber-400", ring: "ring-amber-400/20", label: "stale" },
+  down: { dot: "bg-red-400", ring: "ring-red-400/20", label: "down" },
+}
+
+function HealthBanner({ health }: { health: HealthStatus }) {
+  const isOk = health.ok && !health.error
+  const dotColor = isOk ? "bg-emerald-400" : "bg-red-400"
+  const headline = health.error
+    ? "Health endpoint unreachable"
+    : isOk
+    ? "All systems operational"
+    : "Degraded"
+
+  return (
+    <div
+      className={`flex flex-col gap-3 rounded-md border px-5 py-4 ${
+        isOk
+          ? "border-emerald-400/20 bg-emerald-400/[0.04]"
+          : "border-red-400/30 bg-red-400/[0.06]"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={`inline-block h-2.5 w-2.5 rounded-full ${dotColor}`}
+        />
+        <p className="text-[15px] tracking-tight text-ink">{headline}</p>
+        <p className="mono ml-auto text-[10px] uppercase tracking-[0.18em] text-ink-veiled">
+          {health.error ? "fetch error" : `${health.total_latency_ms}ms total`}
+        </p>
+      </div>
+      {health.error ? (
+        <p className="mono text-[11px] uppercase tracking-[0.12em] text-red-300/90">
+          {health.error}
+        </p>
+      ) : (
+        <ul className="flex flex-wrap gap-x-6 gap-y-2">
+          {health.checks.map((c) => (
+            <li
+              key={c.name}
+              className="mono flex items-center gap-2 text-[11px] uppercase tracking-[0.14em]"
+            >
+              <span
+                aria-hidden
+                className={`inline-block h-1.5 w-1.5 rounded-full ${
+                  c.ok ? "bg-emerald-400" : "bg-red-400"
+                }`}
+              />
+              <span className="text-ink-body/70">{c.name}</span>
+              <span className="text-ink-veiled">
+                {c.ok ? `${c.latency_ms}ms` : c.detail ?? "fail"}
+              </span>
+              {!c.critical ? (
+                <span className="rounded-sm border border-graphite px-1 text-[9px] tracking-[0.18em] text-ink-veiled">
+                  non-critical
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function FleetRow({ entry }: { entry: AgentFleetEntry }) {
+  const meta = TIER_META[entry.tier]
+  return (
+    <li className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-md border border-graphite bg-void/40 px-4 py-3 transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-void/60">
+      <span
+        aria-hidden
+        className={`inline-block h-2.5 w-2.5 rounded-full ${meta.dot} ring-2 ${meta.ring}`}
+      />
+      <div className="flex flex-col">
+        <span className="text-[14px] text-ink">{entry.display_name}</span>
+        <span className="mono text-[11px] uppercase tracking-[0.14em] text-ink-veiled">
+          {entry.agent_id}
+        </span>
+      </div>
+      <span className="mono text-right text-[11px] uppercase tracking-[0.14em] text-ink-body/70">
+        {formatRelative(entry.hours_since_seen)}
+      </span>
+      <span className="mono w-[14ch] text-right text-[11px] uppercase tracking-[0.14em] text-ink-body/70">
+        {entry.signals_24h.toLocaleString()} sig/24h
+      </span>
+    </li>
+  )
+}
+
+function FleetPanel({ fleet }: { fleet: AgentFleetEntry[] }) {
+  if (fleet.length === 0) {
+    return (
+      <p className="mono text-[11px] uppercase tracking-[0.18em] text-ink-veiled">
+        Fleet status unavailable — Supabase fetch failed.
+      </p>
+    )
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {fleet.map((entry) => (
+        <FleetRow key={entry.agent_id} entry={entry} />
+      ))}
+    </ul>
+  )
+}
+
+// ---- Link card -----------------------------------------------------------
+
 function LinkCard({ link }: { link: Link }) {
   const isExternal = link.href.startsWith("http")
   const cls =
@@ -243,6 +363,13 @@ function LinkCard({ link }: { link: Link }) {
 export default async function AdminPage() {
   if (!(await isAdminAuthed())) redirect("/admin/login")
 
+  // Both panels fetch in parallel. Either failure is non-fatal — the page
+  // renders with degraded status indicators rather than 500'ing.
+  const [health, fleet] = await Promise.all([
+    getHealthStatus(),
+    getAgentFleetStatus(),
+  ])
+
   return (
     <main className="min-h-screen bg-void px-6 py-16">
       <div className="mx-auto max-w-5xl">
@@ -269,6 +396,25 @@ export default async function AdminPage() {
             </button>
           </form>
         </div>
+
+        {/* Live system-status banner — server-fetched at render time */}
+        <div className="mt-12">
+          <HealthBanner health={health} />
+        </div>
+
+        {/* Live agent fleet status — heartbeats + 24h signal counts */}
+        <section className="mt-12">
+          <p className="mono text-[11px] uppercase tracking-[0.24em] text-ink-muted">
+            Agent fleet status
+          </p>
+          <p className="mt-2 max-w-[58ch] text-[13px] leading-[1.6] text-ink-body/60">
+            Green = ran in the last 36 hours. Amber = 36–72 hours (one missed
+            tick). Red = &gt; 72 hours (multiple missed ticks — investigate).
+          </p>
+          <div className="mt-6">
+            <FleetPanel fleet={fleet} />
+          </div>
+        </section>
 
         <div className="mt-16 flex flex-col gap-14">
           {sections.map((section) => (
