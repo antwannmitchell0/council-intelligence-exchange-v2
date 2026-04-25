@@ -13,6 +13,7 @@ import { GdeltEventVolumeAgent } from "./agents/gdelt-event-volume"
 import { InsiderFilingAgent } from "./agents/insider-filing"
 import { JobsDataAgent } from "./agents/jobs-data"
 import { ThirteenFAgent } from "./agents/thirteen-f"
+import { ThirteenFDiffAgent } from "./agents/thirteen-f-diff"
 import { WikiEditSurgeAgent } from "./agents/wiki-edit-surge"
 import { YieldCurveAgent } from "./agents/yield-curve"
 
@@ -24,6 +25,8 @@ export const agentRegistry: AgentRegistry = {
   // SEC EDGAR — 6-hourly cron.
   "insider-filing-agent": () => new InsiderFilingAgent(),
   "thirteen-f-agent": () => new ThirteenFAgent(),
+  // Reads thirteen-f-agent's output, computes quarter-over-quarter diffs.
+  "thirteen-f-diff-agent": () => new ThirteenFDiffAgent(),
 
   // Senate Stock Watcher — 6-hourly cron.
   "congress-agent": () => new CongressAgent(),
