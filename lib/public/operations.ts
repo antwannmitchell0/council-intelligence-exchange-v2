@@ -242,6 +242,9 @@ export async function getPublicAgentRoster(): Promise<PublicAgentEntry[]> {
       signals_lifetime: 0,
       hours_since_last_signal: null,
       hours_since_heartbeat: null,
+      last_signal_body: null,
+      orders_submitted_lifetime: 0,
+      orders_filled_lifetime: 0,
     }))
   }
 
@@ -256,20 +259,51 @@ export async function getPublicAgentRoster(): Promise<PublicAgentEntry[]> {
       .then((r) => ({ agent_id: m.agent_id, count: r.count ?? 0 }))
   )
 
-  // Per-agent most-recent signal timestamp — one row each, ordered
-  // descending. Limit 1 = single row return.
+  // Per-agent most-recent signal — one row each, ordered descending.
+  // Includes `body` so the detail panel + speech bubble can show real
+  // signal text (not faked).
   const lastSignalPromises = PUBLIC_AGENT_META.map((m) =>
     supabase
       .from("v2_signals")
-      .select("created_at")
+      .select("created_at, body")
       .eq("agent_id", m.agent_id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then((r) => ({
-        agent_id: m.agent_id,
-        last_signal_at: (r.data as { created_at?: string } | null)?.created_at ?? null,
-      }))
+      .then((r) => {
+        const row = r.data as
+          | { created_at?: string; body?: string }
+          | null
+        return {
+          agent_id: m.agent_id,
+          last_signal_at: row?.created_at ?? null,
+          last_signal_body: row?.body ?? null,
+        }
+      })
+  )
+
+  // Per-agent trade-ticket counts — submitted (any status) + filled.
+  // Two head-only queries each so the total is cheap. v2_trade_tickets
+  // is sparsely populated today (zero for most agents), but the wiring
+  // is in place for when paper-trading volume ramps up.
+  const orderCountPromises = PUBLIC_AGENT_META.map((m) =>
+    Promise.all([
+      supabase
+        .from("v2_trade_tickets")
+        .select("*", { count: "exact", head: true })
+        .eq("agent_id", m.agent_id)
+        .then((r) => r.count ?? 0),
+      supabase
+        .from("v2_trade_tickets")
+        .select("*", { count: "exact", head: true })
+        .eq("agent_id", m.agent_id)
+        .eq("order_status", "filled")
+        .then((r) => r.count ?? 0),
+    ]).then(([submitted, filled]) => ({
+      agent_id: m.agent_id,
+      submitted,
+      filled,
+    }))
   )
 
   // Heartbeats — single query for all agents.
@@ -277,18 +311,36 @@ export async function getPublicAgentRoster(): Promise<PublicAgentEntry[]> {
     .from("v2_agent_heartbeats")
     .select("agent_id, last_seen")
 
-  const [lifetimes, lastSignals, heartbeats] = await Promise.all([
-    Promise.all(lifetimeCountPromises),
-    Promise.all(lastSignalPromises),
-    heartbeatPromise,
-  ])
+  const [lifetimes, lastSignals, orderCounts, heartbeats] =
+    await Promise.all([
+      Promise.all(lifetimeCountPromises),
+      Promise.all(lastSignalPromises),
+      Promise.all(orderCountPromises),
+      heartbeatPromise,
+    ])
 
   const lifetimeMap = new Map<string, number>()
   for (const r of lifetimes) lifetimeMap.set(r.agent_id, r.count)
 
-  const lastSignalMap = new Map<string, string | null>()
+  const lastSignalMap = new Map<
+    string,
+    { at: string | null; body: string | null }
+  >()
   for (const r of lastSignals)
-    lastSignalMap.set(r.agent_id, r.last_signal_at)
+    lastSignalMap.set(r.agent_id, {
+      at: r.last_signal_at,
+      body: r.last_signal_body,
+    })
+
+  const orderCountMap = new Map<
+    string,
+    { submitted: number; filled: number }
+  >()
+  for (const r of orderCounts)
+    orderCountMap.set(r.agent_id, {
+      submitted: r.submitted,
+      filled: r.filled,
+    })
 
   const heartbeatMap = new Map<string, string>()
   for (const r of (heartbeats.data ?? []) as Array<{
@@ -306,12 +358,19 @@ export async function getPublicAgentRoster(): Promise<PublicAgentEntry[]> {
     return (now - ms) / (60 * 60 * 1000)
   }
 
-  return PUBLIC_AGENT_META.map((m) => ({
-    ...m,
-    signals_lifetime: lifetimeMap.get(m.agent_id) ?? 0,
-    hours_since_last_signal: hoursSince(lastSignalMap.get(m.agent_id) ?? null),
-    hours_since_heartbeat: hoursSince(heartbeatMap.get(m.agent_id) ?? null),
-  }))
+  return PUBLIC_AGENT_META.map((m) => {
+    const lastSig = lastSignalMap.get(m.agent_id)
+    const orders = orderCountMap.get(m.agent_id)
+    return {
+      ...m,
+      signals_lifetime: lifetimeMap.get(m.agent_id) ?? 0,
+      hours_since_last_signal: hoursSince(lastSig?.at),
+      hours_since_heartbeat: hoursSince(heartbeatMap.get(m.agent_id)),
+      last_signal_body: lastSig?.body ?? null,
+      orders_submitted_lifetime: orders?.submitted ?? 0,
+      orders_filled_lifetime: orders?.filled ?? 0,
+    }
+  })
 }
 
 // formatRelativePublic moved to ./types — re-exported above for callers

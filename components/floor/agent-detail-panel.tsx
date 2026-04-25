@@ -13,6 +13,10 @@ import {
   formatRelativePublic,
   type PublicAgentEntry,
 } from "@/lib/public/types"
+import {
+  summarizeSignalBody,
+  truncate,
+} from "@/lib/public/signal-summary"
 
 type Props = {
   nickname: FloorNickname
@@ -84,8 +88,8 @@ export function AgentDetailPanel({ nickname, entry, onClose }: Props) {
         </p>
       </div>
 
-      {/* Live stats */}
-      <div className="mt-6 grid grid-cols-2 gap-3 border-t border-graphite pt-5">
+      {/* Live stats — 4 tiles: lifetime signals, last signal time, orders submitted, orders filled */}
+      <div className="mt-6 grid grid-cols-2 gap-3 border-t border-graphite pt-5 sm:grid-cols-4">
         <div className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-3 py-2">
           <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
             Lifetime signals
@@ -102,6 +106,44 @@ export function AgentDetailPanel({ nickname, entry, onClose }: Props) {
             {formatRelativePublic(entry?.hours_since_last_signal ?? null)}
           </p>
         </div>
+        <div className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-3 py-2">
+          <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
+            Orders submitted
+          </p>
+          <p className="text-[18px] font-semibold tracking-tight text-ink">
+            {entry?.orders_submitted_lifetime?.toLocaleString() ?? "—"}
+          </p>
+        </div>
+        <div className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-3 py-2">
+          <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
+            Orders filled
+          </p>
+          <p className="text-[18px] font-semibold tracking-tight text-ink">
+            {entry?.orders_filled_lifetime?.toLocaleString() ?? "—"}
+          </p>
+        </div>
+      </div>
+
+      {/* Latest signal — real signal body parsed to a human-readable snippet */}
+      <div className="mt-5 rounded-md border border-graphite bg-void/40 px-4 py-3">
+        <p
+          className="mono text-[10px] uppercase tracking-[0.18em]"
+          style={{ color: "rgba(201,168,76,0.8)" }}
+        >
+          Latest signal
+        </p>
+        <p className="mt-2 text-[13px] leading-[1.5] text-ink-body/85">
+          {(() => {
+            const summary = summarizeSignalBody(
+              nickname.agent_id,
+              entry?.last_signal_body ?? null
+            )
+            return (
+              truncate(summary, 140) ??
+              "No signals from this agent yet — first publication will appear here."
+            )
+          })()}
+        </p>
       </div>
 
       {/* Citation */}
