@@ -31,6 +31,11 @@ export type FloorNickname = {
   hex: string
 }
 
+// Color palette mirrors v1 council-exchange.vercel.app/floor exactly:
+// PRIME=gold, CIPHER=purple, BOLT=blue, APEX=orange, SAGE=green,
+// NOVA=pink (with 👑), FLUX=emerald, WAVE=indigo, HERALD=orange-bright.
+// Plus ECHO=violet (variant of APEX) and PULSE=amber (cycle-pulse) for
+// the v2-only agents that don't have v1 codenames.
 export const FLOOR_NICKNAMES: FloorNickname[] = [
   {
     nickname: "PRIME",
@@ -41,7 +46,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Watches every Form 4 the SEC publishes. When two or more insiders independently buy the same stock within 30 days, PRIME fires a cluster-buy signal — historically the most reliable insider tell.",
     citation: "Lakonishok & Lee 2001 · Cohen, Malloy & Pomorski 2012",
     letter: "P",
-    hex: "#a78bfa", // violet-glow
+    hex: "#c9a84c", // gold (v1 PRIME)
   },
   {
     nickname: "APEX",
@@ -52,7 +57,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Pulls every 13F-HR information table from SEC EDGAR within 24 hours of filing, resolves CUSIPs to tickers via OpenFIGI, and emits one signal per (filer × holding). The full mosaic of who owns what.",
     citation: "Griffin & Xu 2009 · Ali, Wei & Zhou 2011",
     letter: "A",
-    hex: "#60a5fa", // blue
+    hex: "#f59e0b", // amber-orange (v1 APEX)
   },
   {
     nickname: "ECHO",
@@ -63,7 +68,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Reads APEX's snapshot output, groups by filer × period, and emits a signal whenever a position is added (NEW_ENTRY), exited (EXIT), grown >25% (GROW), or shrunk >25% (SHRINK). The alpha that snapshots can't surface alone.",
     citation: "Ziobrowski 2004 derivative methodology",
     letter: "E",
-    hex: "#7c3aed", // violet
+    hex: "#7c3aed", // violet (variant of APEX)
   },
   {
     nickname: "HERALD",
@@ -74,7 +79,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Scrapes the official Senate Clerk eFDSearch system every 24 hours for new Periodic Transaction Reports. Senator name, ticker, transaction type, amount range — surfaced before mainstream aggregators see it.",
     citation: "Ziobrowski et al. 2004, 2011",
     letter: "H",
-    hex: "#fb923c", // orange
+    hex: "#fb923c", // orange-bright (v1 HERALD)
   },
   {
     nickname: "SAGE",
@@ -85,7 +90,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Pulls FRED 2Y / 10Y / 10Y-2Y spread daily. Flags inversions, regime shifts, and sign flips across the spread. The single most-watched macro recession signal.",
     citation: "Estrella & Mishkin 1998 · Engstrom & Sharpe 2018",
     letter: "S",
-    hex: "#4ade80", // green
+    hex: "#4ade80", // green (v1 SAGE)
   },
   {
     nickname: "PULSE",
@@ -96,7 +101,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Captures nonfarm payrolls + unemployment rate the moment BLS publishes the monthly employment-situation report. Surprises against forecast are the strongest macro reaction trigger of the month.",
     citation: "BLS Public Data API v2",
     letter: "U",
-    hex: "#f59e0b", // amber
+    hex: "#fbbf24", // amber (cycle-pulse)
   },
   {
     nickname: "FLUX",
@@ -107,7 +112,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Pulls FRED FEDFUNDS / DFEDTARU / DFEDTARL daily. Tracks the Fed-funds futures proxy for monetary policy expectations — the single most market-moving macro variable.",
     citation: "Federal Reserve Economic Data",
     letter: "F",
-    hex: "#f87171", // red
+    hex: "#34d399", // emerald (v1 FLUX)
   },
   {
     nickname: "CIPHER",
@@ -118,7 +123,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Watches GDELT 2.0 — every news event from 100,000+ sources worldwide. Detects entity-level event-volume anomalies (sudden surge of mentions for a company, country, or topic) before headlines hit aggregators.",
     citation: "Leetaru & Schrodt — GDELT Project",
     letter: "C",
-    hex: "#facc15", // yellow
+    hex: "#a78bfa", // purple (v1 CIPHER)
   },
   {
     nickname: "WAVE",
@@ -129,7 +134,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Monitors Wikipedia edit velocity per article. Sudden surges on a company's page often precede M&A, scandals, or product announcements by 24–72 hours. The early warning system inside the public encyclopedia.",
     citation: "Moat et al. 2013 · Preis et al. 2013",
     letter: "W",
-    hex: "#94a3b8", // slate
+    hex: "#818cf8", // indigo (v1 WAVE)
   },
   {
     nickname: "BOLT",
@@ -140,10 +145,10 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Watches every ERC-20 + ETH transaction over a configurable threshold. Tracks whale wallets, exchange inflows/outflows, and large holder behavior — the on-chain equivalent of insider buying.",
     citation: "Etherscan API · public Ethereum mainnet",
     letter: "B",
-    hex: "#818cf8", // indigo
+    hex: "#60a5fa", // blue (v1 BOLT)
   },
   {
-    nickname: "NOVA",
+    nickname: "NOVA 👑",
     agent_id: "clinical-trial-outcomes-agent",
     display_name: "Clinical Trials",
     thesis: "Phase 3 readouts, the moment they publish.",
@@ -151,7 +156,7 @@ export const FLOOR_NICKNAMES: FloorNickname[] = [
       "Polls ClinicalTrials.gov v2 API for status transitions on Phase 3 trials. Phase 3 readouts are the dominant binary catalyst in biotech equities — capturing them at publication, before mainstream aggregators, is a direct mechanical edge.",
     citation: "DiMasi, Grabowski, Hansen 2016",
     letter: "N",
-    hex: "#f472b6", // pink
+    hex: "#f472b6", // pink (v1 NOVA)
   },
 ]
 

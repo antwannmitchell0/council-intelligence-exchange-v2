@@ -11,30 +11,23 @@
 
 import "server-only"
 import { getServerClient } from "@/lib/supabase/server"
+import type {
+  HealthCheck,
+  HealthStatus,
+  PublicAgentEntry,
+  PublicOpsSnapshot,
+} from "./types"
+export type {
+  HealthCheck,
+  HealthStatus,
+  PublicAgentEntry,
+  PublicOpsSnapshot,
+} from "./types"
+export { formatRelativePublic } from "./types"
 
 export const COUNCIL_DAY_ZERO_ISO = "2026-04-24"
 export const COUNCIL_DAY_ZERO_MS = Date.parse(`${COUNCIL_DAY_ZERO_ISO}T00:00:00Z`)
 export const VERIFICATION_WINDOW_DAYS = 90
-
-export type PublicOpsSnapshot = {
-  ok: boolean
-  // Calendar day in the verification window (Day 1 = 2026-04-25).
-  day_of_window: number
-  // Total days in the window — fixed at 90 for the broker-paper gate.
-  total_window_days: number
-  // ISO date when the first agent could earn live-verified status.
-  earliest_live_verified_iso: string
-  // Counts — bucketed for at-a-glance ops scan.
-  signals_24h: number
-  signals_lifetime: number
-  active_agent_count: number
-  // Total alpaca paper-trading orders submitted (any status).
-  paper_orders_lifetime: number
-  paper_orders_filled_lifetime: number
-  // 24h subset of paper orders — momentum signal for "this thing is alive".
-  paper_orders_24h: number
-  error?: string
-}
 
 /**
  * The 11 ingest agent IDs — keep this in sync with lib/ingestion/registry.ts
@@ -153,28 +146,8 @@ export async function getPublicOpsSnapshot(): Promise<PublicOpsSnapshot> {
 }
 
 // ---- Public agent roster -------------------------------------------------
-
-export type PublicAgentEntry = {
-  agent_id: string
-  display_name: string
-  description: string
-  // tier: live (production-ready, ingesting), wiring (ingestion works
-  // but routing/mapping pending), roadmap (not yet built).
-  tier: "live" | "wiring" | "roadmap"
-  // Lifetime signal count — never decreases. The right metric for
-  // "how much has this agent produced since Day 0?". 24h windows
-  // misleadingly hit zero on weekends/holidays when SEC / FRED / BLS
-  // don't publish — agents look dead when they're actually fine.
-  signals_lifetime: number
-  // Hours since the agent's most recent SIGNAL (not heartbeat). Direct
-  // freshness indicator. Null if agent has never produced a signal.
-  hours_since_last_signal: number | null
-  // Hours since the agent last RAN (heartbeat). Distinct from signal
-  // freshness — an agent can run successfully and produce zero signals
-  // when upstream has no new data (weekend, holiday, normal sparse
-  // cadence).
-  hours_since_heartbeat: number | null
-}
+// PublicAgentEntry type lives in ./types so client components can import
+// it without pulling the server-only fetcher chain into their bundle.
 
 const PUBLIC_AGENT_META: Array<{
   agent_id: string
@@ -341,10 +314,5 @@ export async function getPublicAgentRoster(): Promise<PublicAgentEntry[]> {
   }))
 }
 
-export function formatRelativePublic(hours: number | null): string {
-  if (hours == null) return "—"
-  if (hours < 1) return "moments ago"
-  if (hours < 36) return `${Math.round(hours)}h ago`
-  if (hours < 72) return `${Math.round(hours / 24)}d ago`
-  return `${Math.round(hours / 24)}d ago`
-}
+// formatRelativePublic moved to ./types — re-exported above for callers
+// that import from this module path.

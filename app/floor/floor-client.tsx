@@ -26,7 +26,7 @@ import {
 import type {
   PublicAgentEntry,
   PublicOpsSnapshot,
-} from "@/lib/public/operations"
+} from "@/lib/public/types"
 import type { AgentRow } from "@/lib/supabase/types"
 
 const TradingFloor3D = dynamic(
@@ -107,7 +107,7 @@ export function FloorClient({ ops, roster, nicknames }: Props) {
       <div className="flex flex-1 flex-col md:flex-row">
         {/* 3D scene area */}
         <div className="relative flex-1">
-          {/* Loading curtain */}
+          {/* Loading curtain — gold spinner (v1 council-exchange) */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-void/95 transition-opacity duration-500"
@@ -115,10 +115,19 @@ export function FloorClient({ ops, roster, nicknames }: Props) {
           >
             <div className="flex flex-col items-center gap-3">
               <span className="relative inline-block h-3 w-3">
-                <span className="absolute inset-0 animate-ping rounded-full bg-violet-glow opacity-50" />
-                <span className="relative inline-block h-3 w-3 rounded-full bg-violet" />
+                <span
+                  className="absolute inset-0 animate-ping rounded-full opacity-50"
+                  style={{ backgroundColor: "#c9a84c" }}
+                />
+                <span
+                  className="relative inline-block h-3 w-3 rounded-full"
+                  style={{ backgroundColor: "#c9a84c" }}
+                />
               </span>
-              <p className="mono text-[11px] uppercase tracking-[0.18em] text-violet-glow">
+              <p
+                className="mono text-[11px] uppercase tracking-[0.18em]"
+                style={{ color: "#c9a84c" }}
+              >
                 Initializing trading floor…
               </p>
             </div>

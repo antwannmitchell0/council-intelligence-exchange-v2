@@ -16,7 +16,13 @@ export function FloorHeader({
       {/* Title bar */}
       <div className="flex items-center justify-between px-6 py-5 sm:px-8">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center rounded-md border border-violet/30 bg-violet/[0.08] p-2">
+          <div
+            className="flex items-center justify-center rounded-md border p-2"
+            style={{
+              borderColor: "rgba(201,168,76,0.3)",
+              backgroundColor: "rgba(201,168,76,0.08)",
+            }}
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="18"
@@ -27,7 +33,7 @@ export function FloorHeader({
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-violet-glow"
+              style={{ color: "#c9a84c" }}
               aria-hidden
             >
               <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
@@ -36,7 +42,13 @@ export function FloorHeader({
           <div>
             <h1 className="text-[18px] font-semibold tracking-tight text-ink sm:text-[20px]">
               THE COUNCIL{" "}
-              <span className="bg-gradient-to-br from-violet to-violet-glow bg-clip-text text-transparent">
+              <span
+                className="bg-clip-text text-transparent"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(135deg, #c9a84c, #f59e0b)",
+                }}
+              >
                 TRADING FLOOR
               </span>
             </h1>
@@ -61,18 +73,33 @@ export function FloorHeader({
         </div>
       </div>
 
-      {/* Instruction strip */}
-      <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-graphite bg-violet/[0.04] px-6 py-2.5 sm:px-8">
-        <span className="mono text-[11px] uppercase tracking-[0.12em] text-violet-glow/80">
+      {/* Instruction strip — gold-tinted (v1 council-exchange aesthetic) */}
+      <div
+        className="flex flex-wrap gap-x-6 gap-y-1 border-t border-graphite px-6 py-2.5 sm:px-8"
+        style={{ backgroundColor: "rgba(201,168,76,0.05)" }}
+      >
+        <span
+          className="mono text-[11px] uppercase tracking-[0.12em]"
+          style={{ color: "rgba(201,168,76,0.8)" }}
+        >
           🖱️ click a desk to inspect
         </span>
-        <span className="mono text-[11px] uppercase tracking-[0.12em] text-violet-glow/80">
+        <span
+          className="mono text-[11px] uppercase tracking-[0.12em]"
+          style={{ color: "rgba(201,168,76,0.8)" }}
+        >
           🔄 drag to rotate
         </span>
-        <span className="mono text-[11px] uppercase tracking-[0.12em] text-violet-glow/80">
+        <span
+          className="mono text-[11px] uppercase tracking-[0.12em]"
+          style={{ color: "rgba(201,168,76,0.8)" }}
+        >
           🔍 scroll to zoom
         </span>
-        <span className="mono text-[11px] uppercase tracking-[0.12em] text-violet-glow/80">
+        <span
+          className="mono text-[11px] uppercase tracking-[0.12em]"
+          style={{ color: "rgba(201,168,76,0.8)" }}
+        >
           ✋ right-click drag to pan
         </span>
         <span className="mono ml-auto text-[11px] uppercase tracking-[0.18em] text-ink-veiled">

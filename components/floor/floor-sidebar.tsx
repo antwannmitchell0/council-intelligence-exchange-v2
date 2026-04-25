@@ -13,7 +13,7 @@
 
 "use client"
 
-import type { PublicAgentEntry, PublicOpsSnapshot } from "@/lib/public/operations"
+import type { PublicAgentEntry, PublicOpsSnapshot } from "@/lib/public/types"
 import type { FloorNickname } from "@/lib/floor/nicknames"
 
 type FloorStatus = "active" | "scanning" | "idle"
@@ -48,36 +48,44 @@ export function FloorSidebar({ ops, roster, selectedNickname, onSelect }: Props)
   const active = roster.filter((r) => r.status === "active").length
   const scanning = roster.filter((r) => r.status === "scanning").length
 
-  const tiles = [
+  // Each tile uses inline-style colors so we get the v1 council-exchange
+  // gold + accent palette exactly, not the v2 violet/dark scheme.
+  const tiles: Array<{
+    label: string
+    value: string
+    color: string
+    bg: string
+    border: string
+  }> = [
     {
       label: "Total agents",
       value: total.toString(),
-      accent: "text-violet-glow",
-      bg: "bg-violet/[0.08]",
-      border: "border-violet/30",
+      color: "#c9a84c", // gold (v1 TOTAL)
+      bg: "rgba(201,168,76,0.08)",
+      border: "rgba(201,168,76,0.3)",
     },
     {
       label: "Active now",
       value: active.toString(),
-      accent: "text-emerald-300",
-      bg: "bg-emerald-400/[0.06]",
-      border: "border-emerald-400/30",
+      color: "#22c55e", // emerald (v1 ACTIVE)
+      bg: "rgba(34,197,94,0.08)",
+      border: "rgba(34,197,94,0.3)",
     },
     {
       label: "Scanning",
       value: scanning.toString(),
-      accent: "text-sky-300",
-      bg: "bg-sky-400/[0.06]",
-      border: "border-sky-400/30",
+      color: "#60a5fa", // blue (v1 SCANNING)
+      bg: "rgba(96,165,250,0.08)",
+      border: "rgba(96,165,250,0.3)",
     },
     {
       // Hit-rate is gated on earning live-verified status (Day 90+).
       // Showing it before is an integrity violation.
       label: "Avg win rate",
       value: "—",
-      accent: "text-ink-veiled",
-      bg: "bg-graphite/40",
-      border: "border-graphite",
+      color: "#a78bfa", // purple (v1 WIN RATE)
+      bg: "rgba(167,139,250,0.06)",
+      border: "rgba(167,139,250,0.2)",
     },
   ]
 
@@ -85,7 +93,10 @@ export function FloorSidebar({ ops, roster, selectedNickname, onSelect }: Props)
     <aside className="flex h-full w-full flex-col gap-4 overflow-y-auto border-l border-graphite bg-void/85 p-5 backdrop-blur-md md:w-[300px]">
       {/* Network status header */}
       <div className="border-b border-graphite pb-4">
-        <p className="mono text-[10px] uppercase tracking-[0.18em] text-violet-glow/80">
+        <p
+          className="mono text-[10px] uppercase tracking-[0.18em]"
+          style={{ color: "rgba(201,168,76,0.8)" }}
+        >
           Network status
         </p>
         <p className="mt-1 text-[16px] font-semibold tracking-tight text-ink">
@@ -104,17 +115,21 @@ export function FloorSidebar({ ops, roster, selectedNickname, onSelect }: Props)
         </div>
       </div>
 
-      {/* Stat tiles */}
+      {/* Stat tiles — gold + accent palette per v1 council-exchange */}
       <div className="grid grid-cols-2 gap-2">
         {tiles.map((t) => (
           <div
             key={t.label}
-            className={`rounded-md border ${t.border} ${t.bg} px-3 py-2.5`}
+            className="rounded-md border px-3 py-2.5"
+            style={{ backgroundColor: t.bg, borderColor: t.border }}
           >
             <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
               {t.label}
             </p>
-            <p className={`mt-1 text-[20px] font-semibold leading-none ${t.accent}`}>
+            <p
+              className="mt-1 text-[20px] font-semibold leading-none"
+              style={{ color: t.color }}
+            >
               {t.value}
             </p>
           </div>
@@ -136,11 +151,15 @@ export function FloorSidebar({ ops, roster, selectedNickname, onSelect }: Props)
                   onClick={() =>
                     onSelect(selected ? null : row.nickname.nickname)
                   }
-                  className={`flex w-full items-center justify-between rounded-md border px-2.5 py-2 text-left transition-colors duration-[120ms] ${
-                    selected
-                      ? "border-violet/40 bg-violet/[0.08]"
-                      : "border-graphite/60 bg-void/40 hover:border-violet/20 hover:bg-void/60"
-                  }`}
+                  className="flex w-full items-center justify-between rounded-md border px-2.5 py-2 text-left transition-colors duration-[120ms]"
+                  style={{
+                    borderColor: selected
+                      ? "rgba(201,168,76,0.4)"
+                      : "rgba(48,53,63,0.6)",
+                    backgroundColor: selected
+                      ? "rgba(201,168,76,0.08)"
+                      : "rgba(11,12,17,0.4)",
+                  }}
                 >
                   <span className="flex items-center gap-2">
                     <span
@@ -175,12 +194,25 @@ export function FloorSidebar({ ops, roster, selectedNickname, onSelect }: Props)
         </ul>
       </div>
 
-      {/* Total signals counter */}
-      <div className="mt-auto rounded-lg border border-violet/20 bg-gradient-to-br from-violet/[0.10] to-violet/[0.02] p-4 text-center">
-        <p className="text-[28px] font-semibold leading-none tracking-tight text-violet-glow">
+      {/* Total signals counter — gold gradient (v1 council-exchange) */}
+      <div
+        className="mt-auto rounded-lg border p-4 text-center"
+        style={{
+          backgroundImage:
+            "linear-gradient(135deg, rgba(201,168,76,0.10), rgba(201,168,76,0.02))",
+          borderColor: "rgba(201,168,76,0.2)",
+        }}
+      >
+        <p
+          className="text-[28px] font-semibold leading-none tracking-tight"
+          style={{ color: "#c9a84c" }}
+        >
           {ops.signals_lifetime.toLocaleString()}
         </p>
-        <p className="mono mt-1.5 text-[10px] uppercase tracking-[0.18em] text-violet-glow/70">
+        <p
+          className="mono mt-1.5 text-[10px] uppercase tracking-[0.18em]"
+          style={{ color: "rgba(201,168,76,0.7)" }}
+        >
           Total signals · since Day 0
         </p>
       </div>
