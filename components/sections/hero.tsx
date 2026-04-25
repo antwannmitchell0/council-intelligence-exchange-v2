@@ -55,10 +55,10 @@ export async function Hero() {
 
       <div className="relative z-10 mt-12 flex flex-wrap items-center justify-center gap-4">
         <a
-          href="/marketplace"
+          href="/pricing"
           className="group inline-flex items-center gap-2 rounded-[8px] bg-violet px-6 py-3.5 text-[15px] font-medium text-ink transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-violet-glow"
         >
-          Browse the Marketplace
+          Get Early Access — $49/mo
           <span
             aria-hidden
             className="transition-transform duration-[120ms] group-hover:translate-x-0.5"
@@ -73,10 +73,10 @@ export async function Hero() {
           View the Leaderboard
         </a>
         <a
-          href="/floor"
+          href="/intelligence"
           className="inline-flex items-center gap-2 rounded-[8px] border border-graphite bg-obsidian/60 px-6 py-3.5 text-[15px] font-medium text-ink-body backdrop-blur transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:border-violet/50 hover:text-ink"
         >
-          ⚡ Enter the Floor
+          Methodology
         </a>
       </div>
 

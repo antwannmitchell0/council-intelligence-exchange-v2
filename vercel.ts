@@ -67,5 +67,9 @@ export const config: VercelConfig = {
     // US market hours — the spec we want long-term is:
     //   schedule: "*/15 13-21 * * 1-5"   (9–4pm ET, weekdays, in UTC).
     { path: "/api/cron/alpaca-poll", schedule: "0 21 * * *" },
+    // Daily subscriber digest — 14:00 UTC = 9 AM ET, market open. Pulls
+    // last 24h of signals, builds per-subscriber summary email, sends
+    // via Resend.
+    { path: "/api/cron/daily-digest", schedule: "0 14 * * *" },
   ],
 }

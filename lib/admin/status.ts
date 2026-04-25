@@ -182,3 +182,85 @@ export function formatRelative(hours: number | null): string {
   if (hours < 48) return `${Math.round(hours)}h ago`
   return `${Math.round(hours / 24)}d ago`
 }
+
+// ---- Revenue snapshot ----------------------------------------------------
+
+export type RevenueStatus = {
+  // True if v2_subscribers table is reachable. False = table missing
+  // (migration 0016 not applied yet) or Supabase unreachable.
+  ok: boolean
+  active_subscribers: number
+  past_due: number
+  canceled: number
+  // Current MRR assuming flat $49/mo Early Access tier. Will lift to a
+  // real per-tier calculation once we have multiple tiers.
+  mrr_usd: number
+  // Last 7 days of new active subscribers — proxy for momentum.
+  new_last_7d: number
+  error?: string
+}
+
+const EARLY_ACCESS_PRICE_USD = 49
+
+export async function getRevenueStatus(): Promise<RevenueStatus> {
+  const supabase = getServerClient()
+  if (!supabase) {
+    return {
+      ok: false,
+      active_subscribers: 0,
+      past_due: 0,
+      canceled: 0,
+      mrr_usd: 0,
+      new_last_7d: 0,
+      error: "supabase_unavailable",
+    }
+  }
+
+  const sevenDaysAgo = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000
+  ).toISOString()
+
+  // Single query, returns all subscribers — we'll bucket in JS. v2_subscribers
+  // grows slowly (subscribers, not signals), so reading the whole table is
+  // fine for now. Lift to a SQL aggregate when we cross 10k rows.
+  const { data, error } = await supabase
+    .from("v2_subscribers")
+    .select("status, tier, created_at")
+    .limit(50000)
+
+  if (error) {
+    return {
+      ok: false,
+      active_subscribers: 0,
+      past_due: 0,
+      canceled: 0,
+      mrr_usd: 0,
+      new_last_7d: 0,
+      error: error.message,
+    }
+  }
+
+  let active = 0
+  let pastDue = 0
+  let canceled = 0
+  let newLast7d = 0
+  for (const r of (data ?? []) as Array<{
+    status: string
+    tier: string
+    created_at: string
+  }>) {
+    if (r.status === "active") active += 1
+    else if (r.status === "past_due") pastDue += 1
+    else if (r.status === "canceled") canceled += 1
+    if (r.created_at >= sevenDaysAgo && r.status !== "canceled") newLast7d += 1
+  }
+
+  return {
+    ok: true,
+    active_subscribers: active,
+    past_due: pastDue,
+    canceled,
+    mrr_usd: active * EARLY_ACCESS_PRICE_USD,
+    new_last_7d: newLast7d,
+  }
+}
