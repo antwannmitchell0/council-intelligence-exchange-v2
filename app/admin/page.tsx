@@ -38,9 +38,9 @@ type Section = {
 
 const sections: Section[] = [
   {
-    title: "Production & monitoring",
+    title: "Production & ops",
     description:
-      "Live site, scheduled crons, uptime alerts. First place to look when something feels off.",
+      "The app itself. Live site, health endpoint, Vercel project home.",
     links: [
       {
         label: "Live site",
@@ -54,15 +54,22 @@ const sections: Section[] = [
           "JSON: supabase + alpaca + sec-edgar checks. 200 = ok, 503 = degraded.",
       },
       {
+        label: "Vercel project dashboard",
+        href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2",
+        description: "Deploys, env vars, crons, runtime logs.",
+      },
+    ],
+  },
+  {
+    title: "Security & monitoring",
+    description:
+      "Every watchdog pointed at the exchange. Uptime, error tracking, cron alerts, platform security dashboards. Start here when something feels off — three independent failure surfaces, three independent notification channels.",
+    links: [
+      {
         label: "UptimeRobot — /api/health",
         href: "https://dashboard.uptimerobot.com/monitors/802919772",
-        description: "5-min interval. Email + SMS + voice alerts on 503.",
-      },
-      {
-        label: "Discord — #general (cron alerts)",
-        href: "https://discord.com/channels/1497409185791348819/1497409186567553127",
         description:
-          "Council Cron bot posts 🚨 red-bar alerts here when an agent run fails or throws.",
+          "5-min interval pings /api/health. Email + SMS + voice alerts when the endpoint returns 503.",
       },
       {
         label: "Sentry — issues feed",
@@ -74,12 +81,51 @@ const sections: Section[] = [
         label: "Sentry — smoke test",
         href: "/api/admin/sentry-test",
         description:
-          "Deliberate throw — use periodically to confirm monitoring is still live end-to-end.",
+          "Deliberate throw — hit monthly to confirm error capture is still live end-to-end.",
       },
       {
-        label: "Vercel project dashboard",
-        href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2",
-        description: "Deploys, env vars, crons, runtime logs.",
+        label: "Discord — #general (cron alerts)",
+        href: "https://discord.com/channels/1497409185791348819/1497409186567553127",
+        description:
+          "Council Cron bot posts 🚨 red-bar alerts when an ingest agent run fails or throws.",
+      },
+      {
+        label: "GitHub — Security tab",
+        href: "https://github.com/antwannmitchell0/council-intelligence-exchange-v2/security",
+        description:
+          "Dependabot advisories, secret scanning, code scanning alerts. Check weekly.",
+      },
+      {
+        label: "GitHub — Dependabot alerts",
+        href: "https://github.com/antwannmitchell0/council-intelligence-exchange-v2/security/dependabot",
+        description: "Vulnerable package advisories (npm + transitive deps).",
+      },
+      {
+        label: "Vercel — Security settings",
+        href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2/settings/security",
+        description:
+          "Deployment protection, DDoS, firewall rules, trusted IPs, attack challenge mode.",
+      },
+      {
+        label: "Vercel — Audit log",
+        href: "https://vercel.com/antwanns-projects/~/settings/audit-log",
+        description: "Every config change across the team — who did what, when.",
+      },
+      {
+        label: "Supabase — Auth settings",
+        href: "https://supabase.com/dashboard/project/_/auth/users",
+        description:
+          "User accounts, session policies, JWT settings, providers (pick project after click).",
+      },
+      {
+        label: "Supabase — Auth logs",
+        href: "https://supabase.com/dashboard/project/_/logs/auth-logs",
+        description: "Sign-ins, sign-outs, failed auth attempts.",
+      },
+      {
+        label: "Supabase — Database logs",
+        href: "https://supabase.com/dashboard/project/_/logs/postgres-logs",
+        description: "Slow queries, errors, connection spikes.",
       },
     ],
   },
