@@ -1,234 +1,328 @@
-// FloorSidebar — right column on /floor.
+// Ported from v1 council-exchange/components/floor/NetworkStats.tsx.
 //
-// Mirrors v1's NETWORK STATUS sidebar in v2's violet/dark palette:
-//   - Status header with pulsing emerald dot
-//   - 4 stat cards: Total Agents · Active Now · Scanning · Avg Win Rate
-//   - Agent roster (codename + status dot — click to focus on the floor)
-//   - Big total-signals counter at bottom
-//
-// Stats are computed from the public roster + ops snapshot. Avg win rate
-// is intentionally hidden until at least one agent earns live-verified
-// (Day 90 earliest) — until then we show "—" because publishing a fake
-// hit-rate is the integrity violation we publicly refuse to commit.
+// Adaptations from v1:
+//   - Total Agents = 11 (not v1's 9)
+//   - Active / Scanning derive from real per-agent CouncilAgent.status
+//   - Avg Win Rate stays "—" with "Verifying" subscript (no fake 100%)
+//   - Total Signals = sum of agent.totalSignals (real lifetime counts)
+//   - Each agent row shows real lifetime signal count, not v1's "100%"
 
 "use client"
 
-import type { PublicAgentEntry, PublicOpsSnapshot } from "@/lib/public/types"
-import type { FloorNickname } from "@/lib/floor/nicknames"
+import {
+  Activity,
+  TrendingUp,
+  Users,
+  Zap,
+} from "lucide-react"
+import type { CouncilAgent } from "@/lib/floor/agents-data"
 
-type FloorStatus = "active" | "scanning" | "idle"
-
-type RosterRow = {
-  nickname: FloorNickname
-  status: FloorStatus
-  signals_lifetime: number
+interface Props {
+  agents: CouncilAgent[]
+  selectedAgent: CouncilAgent | null
+  onSelectAgent: (agent: CouncilAgent | null) => void
+  // Day in the 90-day window — feeds the "Verifying" subscript.
+  dayOfWindow: number
+  totalWindowDays: number
 }
 
-type Props = {
-  ops: PublicOpsSnapshot
-  roster: RosterRow[]
-  selectedNickname: string | null
-  onSelect: (nickname: string | null) => void
-}
+export function FloorSidebar({
+  agents,
+  selectedAgent,
+  onSelectAgent,
+  dayOfWindow,
+  totalWindowDays,
+}: Props) {
+  const total = agents.length
+  const active = agents.filter(
+    (a) => a.status === "active" || a.status === "signal"
+  ).length
+  const scanning = agents.filter((a) => a.status === "scanning").length
+  const totalSignals = agents.reduce((s, a) => s + a.totalSignals, 0)
 
-const STATUS_DOT: Record<FloorStatus, string> = {
-  active: "bg-emerald-400",
-  scanning: "bg-sky-400",
-  idle: "bg-graphite",
-}
-
-const STATUS_LABEL: Record<FloorStatus, string> = {
-  active: "Active",
-  scanning: "Scanning",
-  idle: "Idle",
-}
-
-export function FloorSidebar({ ops, roster, selectedNickname, onSelect }: Props) {
-  const total = roster.length
-  const active = roster.filter((r) => r.status === "active").length
-  const scanning = roster.filter((r) => r.status === "scanning").length
-
-  // Each tile uses inline-style colors so we get the v1 council-exchange
-  // gold + accent palette exactly, not the v2 violet/dark scheme.
   const tiles: Array<{
+    icon: typeof Users
     label: string
     value: string
+    sub?: string
     color: string
-    bg: string
-    border: string
   }> = [
     {
-      label: "Total agents",
+      icon: Users,
+      label: "Total Agents",
       value: total.toString(),
-      color: "#c9a84c", // gold (v1 TOTAL)
-      bg: "rgba(201,168,76,0.08)",
-      border: "rgba(201,168,76,0.3)",
+      color: "#c9a84c",
     },
     {
-      label: "Active now",
+      icon: Activity,
+      label: "Active Now",
       value: active.toString(),
-      color: "#22c55e", // emerald (v1 ACTIVE)
-      bg: "rgba(34,197,94,0.08)",
-      border: "rgba(34,197,94,0.3)",
+      color: "#22c55e",
     },
     {
+      icon: Zap,
       label: "Scanning",
       value: scanning.toString(),
-      color: "#60a5fa", // blue (v1 SCANNING)
-      bg: "rgba(96,165,250,0.08)",
-      border: "rgba(96,165,250,0.3)",
+      color: "#60a5fa",
     },
     {
-      // Hit-rate is gated on earning live-verified status (Day 90+).
-      // Showing it before is an integrity violation.
-      label: "Avg win rate",
+      icon: TrendingUp,
+      label: "Avg Win Rate",
       value: "—",
-      color: "#a78bfa", // purple (v1 WIN RATE)
-      bg: "rgba(167,139,250,0.06)",
-      border: "rgba(167,139,250,0.2)",
+      sub: `Day ${dayOfWindow} / ${totalWindowDays}`,
+      color: "#a78bfa",
     },
   ]
 
   return (
-    <aside className="flex h-full w-full flex-col gap-4 overflow-y-auto border-l border-graphite bg-void/85 p-5 backdrop-blur-md md:w-[300px]">
-      {/* Network status header */}
-      <div className="border-b border-graphite pb-4">
-        <p
-          className="mono text-[10px] uppercase tracking-[0.18em]"
-          style={{ color: "rgba(201,168,76,0.8)" }}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        fontFamily: "var(--font-space-grotesk, system-ui)",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          borderBottom: "1px solid rgba(201,168,76,0.15)",
+          paddingBottom: "16px",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "11px",
+            color: "#c9a84c99",
+            letterSpacing: "0.15em",
+            marginBottom: "4px",
+          }}
         >
-          Network status
-        </p>
-        <p className="mt-1 text-[16px] font-semibold tracking-tight text-ink">
+          NETWORK STATUS
+        </div>
+        <div style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff" }}>
           Live Trading Floor
-        </p>
-        <div className="mt-2 flex items-center gap-2">
-          <span
-            aria-hidden
-            className="relative inline-block h-1.5 w-1.5 rounded-full bg-emerald-400"
-          >
-            <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-50" />
-          </span>
-          <span className="mono text-[10px] uppercase tracking-[0.18em] text-emerald-300">
-            All systems operational
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            marginTop: "6px",
+          }}
+        >
+          <div
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: "#22c55e",
+              animation: "pulse 2s infinite",
+            }}
+          />
+          <span style={{ fontSize: "12px", color: "#22c55e" }}>
+            ALL SYSTEMS OPERATIONAL
           </span>
         </div>
       </div>
 
-      {/* Stat tiles — gold + accent palette per v1 council-exchange */}
-      <div className="grid grid-cols-2 gap-2">
-        {tiles.map((t) => (
+      {/* Stat tiles */}
+      {tiles.map(({ icon: Icon, label, value, sub, color }) => (
+        <div
+          key={label}
+          style={{
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: "12px",
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
           <div
-            key={t.label}
-            className="rounded-md border px-3 py-2.5"
-            style={{ backgroundColor: t.bg, borderColor: t.border }}
+            style={{ display: "flex", alignItems: "center", gap: "10px" }}
           >
-            <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
-              {t.label}
-            </p>
-            <p
-              className="mt-1 text-[20px] font-semibold leading-none"
-              style={{ color: t.color }}
+            <div
+              style={{
+                background: color + "18",
+                border: `1px solid ${color}33`,
+                borderRadius: "8px",
+                padding: "7px",
+                display: "flex",
+              }}
             >
-              {t.value}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Agent roster */}
-      <div className="flex flex-col gap-1.5 border-t border-graphite pt-4">
-        <p className="mono text-[10px] uppercase tracking-[0.18em] text-ink-veiled">
-          Agent roster
-        </p>
-        <ul className="mt-2 flex flex-col gap-1.5">
-          {roster.map((row) => {
-            const selected = selectedNickname === row.nickname.nickname
-            return (
-              <li key={row.nickname.nickname}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSelect(selected ? null : row.nickname.nickname)
-                  }
-                  className="flex w-full items-center justify-between rounded-md border px-2.5 py-2 text-left transition-colors duration-[120ms]"
+              <Icon size={14} color={color} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: "13px", color: "#ffffff66" }}>
+                {label}
+              </span>
+              {sub ? (
+                <span
                   style={{
-                    borderColor: selected
-                      ? "rgba(201,168,76,0.4)"
-                      : "rgba(48,53,63,0.6)",
-                    backgroundColor: selected
-                      ? "rgba(201,168,76,0.08)"
-                      : "rgba(11,12,17,0.4)",
+                    fontSize: "10px",
+                    color: "#ffffff33",
+                    letterSpacing: "0.05em",
+                    marginTop: "1px",
                   }}
                 >
-                  <span className="flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className="flex h-5 w-5 items-center justify-center rounded-[5px] border border-graphite text-[10px] font-bold"
-                      style={{
-                        backgroundColor: `${row.nickname.hex}1a`,
-                        borderColor: `${row.nickname.hex}55`,
-                        color: row.nickname.hex,
-                      }}
-                    >
-                      {row.nickname.letter}
-                    </span>
-                    <span className="mono text-[12px] tracking-[0.08em] text-ink">
-                      {row.nickname.nickname}
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="mono text-[10px] tracking-[0.08em] text-ink-veiled">
-                      {row.signals_lifetime.toLocaleString()}
-                    </span>
-                    <span
-                      aria-hidden
-                      className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[row.status]}`}
-                      title={STATUS_LABEL[row.status]}
-                    />
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </div>
+                  {sub}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <span style={{ fontSize: "18px", fontWeight: 700, color }}>
+            {value}
+          </span>
+        </div>
+      ))}
 
-      {/* Total signals counter — gold gradient (v1 council-exchange) */}
+      {/* Agent roster — clickable rows */}
       <div
-        className="mt-auto rounded-lg border p-4 text-center"
         style={{
-          backgroundImage:
-            "linear-gradient(135deg, rgba(201,168,76,0.10), rgba(201,168,76,0.02))",
-          borderColor: "rgba(201,168,76,0.2)",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          paddingTop: "16px",
         }}
       >
-        <p
-          className="text-[28px] font-semibold leading-none tracking-tight"
-          style={{ color: "#c9a84c" }}
+        <div
+          style={{
+            fontSize: "11px",
+            color: "#ffffff33",
+            letterSpacing: "0.1em",
+            marginBottom: "12px",
+          }}
         >
-          {ops.signals_lifetime.toLocaleString()}
-        </p>
-        <p
-          className="mono mt-1.5 text-[10px] uppercase tracking-[0.18em]"
-          style={{ color: "rgba(201,168,76,0.7)" }}
+          AGENT ROSTER
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+          }}
         >
-          Total signals · since Day 0
-        </p>
+          {agents.map((agent) => {
+            const isSelected = selectedAgent?.code === agent.code
+            const dotColor =
+              agent.status === "active" || agent.status === "signal"
+                ? "#22c55e"
+                : agent.status === "scanning"
+                  ? "#60a5fa"
+                  : "#4b5563"
+            return (
+              <button
+                key={agent.code}
+                type="button"
+                onClick={() => onSelectAgent(isSelected ? null : agent)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 10px",
+                  background: isSelected
+                    ? agent.color + "18"
+                    : "rgba(255,255,255,0.02)",
+                  borderRadius: "8px",
+                  border: `1px solid ${
+                    isSelected ? agent.color + "55" : "rgba(255,255,255,0.04)"
+                  }`,
+                  cursor: "pointer",
+                  width: "100%",
+                  textAlign: "left",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "22px",
+                      height: "22px",
+                      borderRadius: "6px",
+                      background: agent.color + "22",
+                      border: `1px solid ${agent.color}44`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      color: agent.color,
+                    }}
+                  >
+                    {agent.code}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: "13px",
+                      color: "#ffffffcc",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {agent.isNova ? `${agent.name} 👑` : agent.name}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <span style={{ fontSize: "11px", color: "#ffffff44" }}>
+                    {agent.totalSignals.toLocaleString()}
+                  </span>
+                  <div
+                    style={{
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      background: dotColor,
+                    }}
+                  />
+                </div>
+              </button>
+            )
+          })}
+        </div>
       </div>
-    </aside>
-  )
-}
 
-// Helper for callers to derive status from heartbeat + signal freshness.
-export function deriveStatus(entry: PublicAgentEntry): FloorStatus {
-  // Active = heartbeat in last 36h AND has produced signals
-  // Scanning = heartbeat in last 36h, no recent signals (waiting for upstream)
-  // Idle = no recent heartbeat
-  const hb = entry.hours_since_heartbeat
-  if (hb == null || hb > 36) return "idle"
-  if (entry.signals_lifetime > 0 && (entry.hours_since_last_signal ?? 999) < 72) {
-    return "active"
-  }
-  return "scanning"
+      {/* Total signals counter */}
+      <div
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(201,168,76,0.08), rgba(201,168,76,0.03))",
+          border: "1px solid rgba(201,168,76,0.2)",
+          borderRadius: "12px",
+          padding: "16px",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "32px",
+            fontWeight: 800,
+            color: "#c9a84c",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {totalSignals.toLocaleString()}
+        </div>
+        <div
+          style={{
+            fontSize: "11px",
+            color: "#c9a84c99",
+            letterSpacing: "0.12em",
+            marginTop: "4px",
+          }}
+        >
+          TOTAL SIGNALS · LIFETIME
+        </div>
+      </div>
+    </div>
+  )
 }

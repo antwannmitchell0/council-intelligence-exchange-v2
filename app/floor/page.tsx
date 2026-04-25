@@ -1,38 +1,35 @@
-// /floor — the trading floor.
+// /floor — Council Intelligence Exchange Trading Floor.
 //
-// Server-renders a layout shell (header + 3D canvas slot + sidebar) and
-// hydrates the FloorClient on the client for the 3D scene + agent detail
-// click handling. Mirrors the v1 council-exchange.vercel.app/floor
-// structure but in v2's violet/dark palette, with v2's real ingestion
-// agents wearing public codenames (PRIME, CIPHER, etc.) and the
-// real specialty revealed on click.
+// Server-renders the page shell + dispatches data to FloorClient. The
+// scene itself (humanoid agents + walking/talking FSM + gold backdrop +
+// connection beams) was ported wholesale from the operator's prior v1
+// build at council-exchange.vercel.app. Adapted to v2's data sources
+// (real per-agent lifetime signals, last-signal text, order counts) per
+// the integrity contract — no faked metrics.
 
 import type { Metadata } from "next"
 import { FloorClient } from "@/app/floor/floor-client"
 import {
+  COUNCIL_DAY_ZERO_ISO,
+  VERIFICATION_WINDOW_DAYS,
+  dayOfWindow,
   getPublicAgentRoster,
-  getPublicOpsSnapshot,
 } from "@/lib/public/operations"
-import { allFloorNicknames } from "@/lib/floor/nicknames"
 
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "The Floor · Council Trading Floor",
-  description:
-    "11 AI agents in motion — codenamed, math-verified, and operating in real time. Click any desk to inspect the agent's specialty.",
+  description: `11 AI agents working in real time — humanoid figures walking the floor, holding meetings, generating signals. Click any desk to inspect. Day-0 anchor: ${COUNCIL_DAY_ZERO_ISO}.`,
 }
 
 export default async function FloorPage() {
-  const [ops, roster] = await Promise.all([
-    getPublicOpsSnapshot(),
-    getPublicAgentRoster(),
-  ])
-  const nicknames = allFloorNicknames()
-
+  const roster = await getPublicAgentRoster()
   return (
-    <main className="relative flex min-h-screen flex-col bg-void">
-      <FloorClient ops={ops} roster={roster} nicknames={nicknames} />
-    </main>
+    <FloorClient
+      roster={roster}
+      dayOfWindow={dayOfWindow()}
+      totalWindowDays={VERIFICATION_WINDOW_DAYS}
+    />
   )
 }

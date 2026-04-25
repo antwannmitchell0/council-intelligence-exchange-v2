@@ -1,177 +1,349 @@
-// AgentDetailPanel — shown over the floor when a desk is clicked.
+// Ported from v1 council-exchange/components/floor/AgentPanel.tsx.
 //
-// Reveals the real specialty behind the codename: real display name,
-// thesis, what-this-actually-does paragraph, academic citation, lifetime
-// signals, last-signal time, and a CTA to subscribe for the actual
-// signal stream.
+// Adaptations from v1:
+//   - Win Rate / Avg Return tiles show "—" with a "Day N / 90" hint
+//     instead of v1's faked "100%" / "+9.4%". Integrity contract:
+//     no claim is published until the math gate earns it.
+//   - "Signals" tile uses real signals_lifetime from v2.
+//   - "Last Signal" block shows the parsed last_signal_body from v2.
+//   - View Signals + Lease Agent CTAs replaced with one $49/mo /pricing
+//     link (v2's actual subscription product).
 
 "use client"
 
 import Link from "next/link"
-import type { FloorNickname } from "@/lib/floor/nicknames"
 import {
-  formatRelativePublic,
-  type PublicAgentEntry,
-} from "@/lib/public/types"
-import {
-  summarizeSignalBody,
-  truncate,
-} from "@/lib/public/signal-summary"
+  Activity,
+  Target,
+  TrendingUp,
+  X,
+  Zap,
+} from "lucide-react"
+import type { CouncilAgent } from "@/lib/floor/agents-data"
 
-type Props = {
-  nickname: FloorNickname
-  // Live agent data (heartbeat + signal counts) — null if Supabase
-  // unavailable.
-  entry: PublicAgentEntry | null
+interface AgentPanelProps {
+  agent: CouncilAgent
+  // Day in the 90-day verification window — used to communicate progress
+  // on the still-unearned win rate / avg return tiles.
+  dayOfWindow: number
+  totalWindowDays: number
   onClose: () => void
 }
 
-export function AgentDetailPanel({ nickname, entry, onClose }: Props) {
+const statusLabels: Record<string, { label: string; color: string }> = {
+  active: { label: "ACTIVE", color: "#22c55e" },
+  scanning: { label: "SCANNING", color: "#60a5fa" },
+  signal: { label: "⚡ SIGNAL", color: "#f59e0b" },
+  idle: { label: "IDLE", color: "#6b7280" },
+}
+
+export function AgentDetailPanel({
+  agent,
+  dayOfWindow,
+  totalWindowDays,
+  onClose,
+}: AgentPanelProps) {
+  const status = statusLabels[agent.status]
+  const verifyingLabel = `Day ${dayOfWindow} / ${totalWindowDays}`
+
   return (
     <div
-      role="dialog"
-      aria-label={`${nickname.nickname} agent detail`}
-      className="pointer-events-auto absolute left-1/2 top-1/2 z-30 w-[min(520px,calc(100%-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-void/95 p-7 backdrop-blur-xl"
       style={{
-        borderColor: "rgba(201,168,76,0.3)",
-        boxShadow: "0 25px 50px -12px rgba(201,168,76,0.15)",
+        background: "rgba(5,5,15,0.95)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        border: `1px solid ${agent.color}44`,
+        borderRadius: "16px",
+        padding: "24px",
+        width: "320px",
+        boxShadow: `0 0 40px ${agent.color}22, 0 20px 60px rgba(0,0,0,0.8)`,
+        fontFamily: "var(--font-space-grotesk, system-ui)",
       }}
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close detail panel"
-        className="mono absolute right-4 top-4 text-[11px] uppercase tracking-[0.18em] text-ink-veiled transition-colors duration-[120ms] hover:text-ink"
-      >
-        Close ✕
-      </button>
-
-      {/* Codename block */}
-      <div className="flex items-center gap-3">
-        <span
-          aria-hidden
-          className="flex h-10 w-10 items-center justify-center rounded-md border text-[16px] font-bold"
-          style={{
-            backgroundColor: `${nickname.hex}1f`,
-            borderColor: `${nickname.hex}55`,
-            color: nickname.hex,
-          }}
-        >
-          {nickname.letter}
-        </span>
-        <div>
-          <p className="mono text-[10px] uppercase tracking-[0.24em] text-ink-veiled">
-            Agent codename
-          </p>
-          <p className="text-[24px] font-semibold tracking-[0.04em] text-ink">
-            {nickname.nickname}
-          </p>
-        </div>
-      </div>
-
-      {/* Real specialty */}
-      <div className="mt-6 border-t border-graphite pt-5">
-        <p
-          className="mono text-[10px] uppercase tracking-[0.18em]"
-          style={{ color: "rgba(201,168,76,0.8)" }}
-        >
-          What this agent actually does
-        </p>
-        <p className="mt-2 text-[16px] font-semibold tracking-tight text-ink">
-          {nickname.display_name}
-        </p>
-        <p className="mt-2 text-[13px] italic leading-[1.5] text-ink-body/85">
-          {nickname.thesis}
-        </p>
-        <p className="mt-4 text-[13px] leading-[1.65] text-ink-body/80">
-          {nickname.detail}
-        </p>
-      </div>
-
-      {/* Live stats — 4 tiles: lifetime signals, last signal time, orders submitted, orders filled */}
-      <div className="mt-6 grid grid-cols-2 gap-3 border-t border-graphite pt-5 sm:grid-cols-4">
-        <div className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-3 py-2">
-          <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
-            Lifetime signals
-          </p>
-          <p className="text-[18px] font-semibold tracking-tight text-ink">
-            {entry?.signals_lifetime.toLocaleString() ?? "—"}
-          </p>
-        </div>
-        <div className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-3 py-2">
-          <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
-            Last signal
-          </p>
-          <p className="text-[14px] font-semibold tracking-tight text-ink">
-            {formatRelativePublic(entry?.hours_since_last_signal ?? null)}
-          </p>
-        </div>
-        <div className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-3 py-2">
-          <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
-            Orders submitted
-          </p>
-          <p className="text-[18px] font-semibold tracking-tight text-ink">
-            {entry?.orders_submitted_lifetime?.toLocaleString() ?? "—"}
-          </p>
-        </div>
-        <div className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-3 py-2">
-          <p className="mono text-[9px] uppercase tracking-[0.18em] text-ink-veiled">
-            Orders filled
-          </p>
-          <p className="text-[18px] font-semibold tracking-tight text-ink">
-            {entry?.orders_filled_lifetime?.toLocaleString() ?? "—"}
-          </p>
-        </div>
-      </div>
-
-      {/* Latest signal — real signal body parsed to a human-readable snippet */}
-      <div className="mt-5 rounded-md border border-graphite bg-void/40 px-4 py-3">
-        <p
-          className="mono text-[10px] uppercase tracking-[0.18em]"
-          style={{ color: "rgba(201,168,76,0.8)" }}
-        >
-          Latest signal
-        </p>
-        <p className="mt-2 text-[13px] leading-[1.5] text-ink-body/85">
-          {(() => {
-            const summary = summarizeSignalBody(
-              nickname.agent_id,
-              entry?.last_signal_body ?? null
-            )
-            return (
-              truncate(summary, 140) ??
-              "No signals from this agent yet — first publication will appear here."
-            )
-          })()}
-        </p>
-      </div>
-
-      {/* Citation */}
-      <p className="mono mt-5 text-[10px] uppercase tracking-[0.14em] text-ink-veiled">
-        Anchor · {nickname.citation}
-      </p>
-
-      {/* Subscribe CTA — gold (v1 council-exchange) */}
+      {/* Header */}
       <div
-        className="mt-6 flex items-center justify-between gap-3 rounded-lg border px-4 py-3"
         style={{
-          borderColor: "rgba(201,168,76,0.3)",
-          backgroundColor: "rgba(201,168,76,0.06)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: "20px",
         }}
       >
-        <p className="text-[12px] leading-[1.5] text-ink-body/80">
-          Subscribers see the actual signals as {nickname.nickname} fires
-          them — symbols, sides, filing references.
-        </p>
-        <Link
-          href="/pricing"
+        <div>
+          <div
+            style={{
+              fontSize: "11px",
+              letterSpacing: "0.15em",
+              color: agent.color + "99",
+              marginBottom: "4px",
+            }}
+          >
+            AGENT {agent.code}
+          </div>
+          <div
+            style={{
+              fontSize: "24px",
+              fontWeight: 700,
+              color: "#ffffff",
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {agent.isNova ? `${agent.name} 👑` : agent.name}
+          </div>
+          <div
+            style={{
+              fontSize: "13px",
+              color: "#ffffff66",
+              marginTop: "2px",
+            }}
+          >
+            {agent.specialty}
+          </div>
+        </div>
+        <button
           onClick={onClose}
-          className="mono shrink-0 rounded-md px-3 py-1.5 text-[11px] uppercase tracking-[0.14em] text-void transition-opacity duration-[120ms] hover:opacity-90"
-          style={{ backgroundColor: "#c9a84c" }}
+          style={{
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "8px",
+            padding: "6px",
+            cursor: "pointer",
+            color: "#ffffff66",
+            display: "flex",
+            alignItems: "center",
+          }}
         >
-          $49/mo →
-        </Link>
+          <X size={14} />
+        </button>
       </div>
+
+      {/* Status + Verifying chips */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+        <span
+          style={{
+            fontSize: "11px",
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            color: status.color,
+            background: status.color + "18",
+            border: `1px solid ${status.color}44`,
+            borderRadius: "6px",
+            padding: "4px 10px",
+          }}
+        >
+          {status.label}
+        </span>
+        <span
+          style={{
+            fontSize: "11px",
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            color: "#c9a84c",
+            background: "#c9a84c18",
+            border: "1px solid #c9a84c44",
+            borderRadius: "6px",
+            padding: "4px 10px",
+          }}
+        >
+          VERIFYING · {verifyingLabel}
+        </span>
+      </div>
+
+      {/* Stats grid — real lifetime signals + orders, gated win rate */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "12px",
+          marginBottom: "20px",
+        }}
+      >
+        {[
+          {
+            icon: Activity,
+            label: "Signals",
+            value: agent.totalSignals.toLocaleString(),
+            color: agent.color,
+            sub: agent.totalSignals > 0 ? "lifetime" : "no signals yet",
+          },
+          {
+            icon: Zap,
+            label: "Orders",
+            value: agent.ordersSubmitted.toLocaleString(),
+            color: "#60a5fa",
+            sub: `${agent.ordersFilled.toLocaleString()} filled`,
+          },
+          {
+            icon: TrendingUp,
+            label: "Win Rate",
+            value: "—",
+            color: "#a78bfa",
+            sub: `earns at day ${totalWindowDays}`,
+          },
+          {
+            icon: Target,
+            label: "Avg Return",
+            value: "—",
+            color: "#c9a84c",
+            sub: `earns at day ${totalWindowDays}`,
+          },
+        ].map(({ icon: Icon, label, value, color, sub }) => (
+          <div
+            key={label}
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: "10px",
+              padding: "12px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                marginBottom: "6px",
+              }}
+            >
+              <Icon size={12} color={color} />
+              <span
+                style={{
+                  fontSize: "10px",
+                  color: "#ffffff44",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                {label.toUpperCase()}
+              </span>
+            </div>
+            <div style={{ fontSize: "16px", fontWeight: 700, color }}>
+              {value}
+            </div>
+            {sub ? (
+              <div
+                style={{
+                  fontSize: "10px",
+                  color: "#ffffff33",
+                  marginTop: "2px",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {sub}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {/* Verification progress bar */}
+      <div style={{ marginBottom: "20px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: "6px",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "11px",
+              color: "#ffffff44",
+              letterSpacing: "0.1em",
+            }}
+          >
+            VERIFICATION
+          </span>
+          <span
+            style={{
+              fontSize: "11px",
+              color: agent.color,
+              fontWeight: 600,
+            }}
+          >
+            {Math.round((dayOfWindow / totalWindowDays) * 100)}%
+          </span>
+        </div>
+        <div
+          style={{
+            height: "4px",
+            background: "rgba(255,255,255,0.06)",
+            borderRadius: "2px",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${Math.min(100, (dayOfWindow / totalWindowDays) * 100)}%`,
+              background: `linear-gradient(90deg, ${agent.color}, ${agent.color}cc)`,
+              borderRadius: "2px",
+              transition: "width 0.8s ease",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Last signal — real text */}
+      <div
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: "10px",
+          padding: "12px",
+          marginBottom: "16px",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "10px",
+            color: "#ffffff33",
+            letterSpacing: "0.12em",
+            marginBottom: "6px",
+          }}
+        >
+          LAST SIGNAL
+        </div>
+        <div style={{ fontSize: "13px", color: "#ffffffcc", lineHeight: 1.5 }}>
+          {agent.lastSignal}
+        </div>
+      </div>
+
+      {/* Thesis line */}
+      <div
+        style={{
+          fontSize: "11px",
+          color: "#ffffff44",
+          letterSpacing: "0.05em",
+          marginBottom: "16px",
+          fontStyle: "italic",
+        }}
+      >
+        {agent.thesis}
+      </div>
+
+      {/* Single CTA — $49/mo Early Access */}
+      <Link
+        href="/pricing"
+        onClick={onClose}
+        style={{
+          display: "block",
+          width: "100%",
+          background: `linear-gradient(135deg, ${agent.color}, ${agent.color}bb)`,
+          color: "#000",
+          border: "none",
+          borderRadius: "10px",
+          padding: "12px",
+          fontSize: "13px",
+          fontWeight: 700,
+          letterSpacing: "0.05em",
+          cursor: "pointer",
+          textAlign: "center",
+          textDecoration: "none",
+        }}
+      >
+        Get Early Access — $49/mo →
+      </Link>
     </div>
   )
 }
+
+export default AgentDetailPanel

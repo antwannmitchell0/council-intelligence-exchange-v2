@@ -1,251 +1,413 @@
-// AgentFigure — Roblox-style humanoid 3D character.
+// Ported wholesale from v1 council-exchange.vercel.app
+// (components/floor/AgentCharacter.tsx). The v1 build is the operator's
+// own prior work and is what they want this scene to look like.
 //
-// Replaces the earlier abstract pulsing primitive shape with a full
-// humanoid: head, hair, eyes, torso, arms, legs. Skin tone + hair
-// color vary across agents (deterministic by agent_id) so the floor
-// reads as a roomful of distinct people, not clones.
-//
-// Animation states (driven by parent scene):
-//   "idle"    — at desk, gentle bob + sway
-//   "walking" — translating between positions, leg + arm swing
-//   "talking" — facing partner, head nod, occasional gesture
-//
-// The parent scene owns position interpolation and target tracking;
-// this component owns body + limb pose given the current state.
+// Adaptations from v1:
+//   - Imports CouncilAgent from lib/floor/agents-data (v2 adapter) instead
+//     of v1's static agents-data.
+//   - Personality table P extended with E (ECHO) and U (PULSE) — v2 has
+//     11 agents vs v1's 9.
+//   - All animation logic (DESK / MOVING / TALKING / RETURNING FSM,
+//     proximity-based encounter, gesture animations) preserved verbatim.
 
 "use client"
 
-import { Html } from "@react-three/drei"
+import { useRef } from "react"
 import { useFrame } from "@react-three/fiber"
-import { useMemo, useRef } from "react"
+import { Text, Billboard } from "@react-three/drei"
 import * as THREE from "three"
-import type { AgentRow } from "@/lib/supabase/types"
+import type { CouncilAgent } from "@/lib/floor/agents-data"
 
-export type AgentState = "idle" | "walking" | "talking"
-
-type Props = {
-  agent: AgentRow
-  // World position of the GROUP — parent scene owns lerp.
-  position: [number, number, number]
-  // Y rotation in radians — used to face the desk monitor at idle, the
-  // walk direction during walking, or a partner during talking.
-  rotationY?: number
-  // Per-instance phase so adjacent identical agents don't sync.
-  phase?: number
-  state?: AgentState
-  onClick?: () => void
-}
-
-// Skin-tone palette — 5 stops for diversity. Picked from agent_id hash.
-const SKIN_TONES = [
-  "#f5d4a3", // pale
-  "#e8c39e", // light tan
-  "#c69478", // medium
-  "#8d5524", // deep
-  "#3d2817", // darkest
-]
-
-// Hair palette — 3 stops.
-const HAIR_TONES = ["#1a1a1a", "#3a2517", "#7a6a5a"]
-
-// Cheap deterministic hash for picking palette indices stably.
-function hash(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = (h << 5) - h + s.charCodeAt(i)
-    h |= 0
+// Personality per agent — determines how they move and socialize.
+// Letters match the `code` field on CouncilAgent. Original v1 entries
+// preserved; E + U added for v2's two extra agents (ECHO + PULSE).
+const P: Record<
+  string,
+  {
+    deskTime: [number, number]
+    speed: number
+    talkTime: [number, number]
+    wander: number
+    social: number
+    phase: number
   }
-  return Math.abs(h)
+> = {
+  A: { deskTime: [1.5, 3], speed: 1.4, talkTime: [2, 4], wander: 6, social: 0.85, phase: 0.0 },
+  B: { deskTime: [3, 6], speed: 0.8, talkTime: [2, 3], wander: 3, social: 0.4, phase: 1.2 },
+  C: { deskTime: [2, 4], speed: 1.1, talkTime: [3, 5], wander: 5, social: 0.7, phase: 0.5 },
+  E: { deskTime: [4, 8], speed: 0.7, talkTime: [3, 6], wander: 3, social: 0.45, phase: 1.5 },
+  F: { deskTime: [4, 8], speed: 0.6, talkTime: [4, 7], wander: 2, social: 0.25, phase: 2.1 },
+  H: { deskTime: [1.5, 3], speed: 1.2, talkTime: [1.5, 3], wander: 5, social: 0.75, phase: 0.8 },
+  N: { deskTime: [1, 2], speed: 1.6, talkTime: [2, 3], wander: 7, social: 0.9, phase: 0.3 },
+  P: { deskTime: [3, 5], speed: 0.9, talkTime: [3, 5], wander: 3, social: 0.55, phase: 1.7 },
+  S: { deskTime: [3, 6], speed: 0.7, talkTime: [5, 8], wander: 3, social: 0.5, phase: 2.5 },
+  U: { deskTime: [5, 9], speed: 0.6, talkTime: [4, 8], wander: 2, social: 0.3, phase: 2.7 },
+  W: { deskTime: [2, 4], speed: 1.1, talkTime: [2, 4], wander: 5, social: 0.65, phase: 1.0 },
 }
 
-export function AgentFigure({
+const BOUNDS = { x: [-9, 9], z: [-7, 3] }
+const TALK_DIST = 0.9
+
+function rand(min: number, max: number) {
+  return min + Math.random() * (max - min)
+}
+
+function clamp(v: THREE.Vector3) {
+  v.x = THREE.MathUtils.clamp(v.x, BOUNDS.x[0], BOUNDS.x[1])
+  v.z = THREE.MathUtils.clamp(v.z, BOUNDS.z[0], BOUNDS.z[1])
+  return v
+}
+
+type S = "DESK" | "MOVING" | "TALKING" | "RETURNING"
+
+export interface AgentCharacterProps {
+  agent: CouncilAgent
+  onSelect: (a: CouncilAgent) => void
+  selected: boolean
+  posRef: React.MutableRefObject<Map<string, THREE.Vector3>>
+  allCodes: string[]
+}
+
+export function AgentCharacter({
   agent,
-  position,
-  rotationY = 0,
-  phase = 0,
-  state = "idle",
-  onClick,
-}: Props) {
-  const groupRef = useRef<THREE.Group>(null)
-  const upperRef = useRef<THREE.Group>(null) // bobs in idle
-  const headRef = useRef<THREE.Group>(null) // nods in talking
-  const leftArmRef = useRef<THREE.Group>(null)
-  const rightArmRef = useRef<THREE.Group>(null)
-  const leftLegRef = useRef<THREE.Group>(null)
-  const rightLegRef = useRef<THREE.Group>(null)
+  onSelect,
+  selected,
+  posRef,
+  allCodes,
+}: AgentCharacterProps) {
+  const group = useRef<THREE.Group>(null)
+  const head = useRef<THREE.Mesh>(null)
+  const lArm = useRef<THREE.Group>(null)
+  const rArm = useRef<THREE.Group>(null)
+  const lLeg = useRef<THREE.Group>(null)
+  const rLeg = useRef<THREE.Group>(null)
+  const glowRing = useRef<THREE.Mesh>(null)
 
-  const { skin, hair, accent } = useMemo(() => {
-    const h = hash(agent.id)
-    return {
-      skin: SKIN_TONES[h % SKIN_TONES.length],
-      hair: HAIR_TONES[(h >> 3) % HAIR_TONES.length],
-      accent: agent.hex || "#7c3aed",
+  const pers = P[agent.code] ?? P.A
+  const home = new THREE.Vector3(agent.deskPosition[0], 0, agent.deskPosition[2])
+
+  const state = useRef<S>("DESK")
+  const timer = useRef(pers.phase)
+  const target = useRef(home.clone())
+  const partner = useRef<string | null>(null)
+
+  useFrame((_, dt) => {
+    if (!group.current) return
+    const pos = group.current.position
+    const t = performance.now() / 1000
+
+    posRef.current.set(agent.code, pos.clone())
+
+    if (glowRing.current) {
+      const speed =
+        agent.status === "signal" ? 5 : agent.status === "active" ? 2 : 0.8
+      ;(glowRing.current.material as THREE.MeshBasicMaterial).opacity =
+        (Math.sin(t * speed) * 0.5 + 0.5) * 0.22
     }
-  }, [agent.id, agent.hex])
 
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime() + phase
-    const group = groupRef.current
-    if (!group) return
+    timer.current -= dt
 
-    group.position.set(position[0], position[1], position[2])
-    group.rotation.y = rotationY
+    // ── DESK ───────────────────────────────────────────────
+    if (state.current === "DESK") {
+      if (lArm.current) lArm.current.rotation.x = Math.sin(t * 2.5) * 0.12
+      if (rArm.current) rArm.current.rotation.x = Math.sin(t * 2.5 + Math.PI) * 0.12
+      if (head.current) {
+        head.current.rotation.x = 0
+        head.current.rotation.y = 0
+      }
+      group.current.position.y = 0
 
-    if (state === "walking") {
-      const swing = Math.sin(t * 6) * 0.5
-      const armSwing = Math.sin(t * 6 + Math.PI) * 0.4
-      if (leftLegRef.current) leftLegRef.current.rotation.x = swing
-      if (rightLegRef.current) rightLegRef.current.rotation.x = -swing
-      if (leftArmRef.current) leftArmRef.current.rotation.x = armSwing
-      if (rightArmRef.current) rightArmRef.current.rotation.x = -armSwing
-      if (upperRef.current)
-        upperRef.current.position.y = 0.85 + Math.abs(Math.sin(t * 6)) * 0.04
-      if (headRef.current) {
-        headRef.current.rotation.x = 0
-        headRef.current.rotation.y = 0
+      if (timer.current <= 0) {
+        if (Math.random() < pers.social) {
+          const others = allCodes.filter((c) => c !== agent.code)
+          const code = others[Math.floor(Math.random() * others.length)]
+          const op = posRef.current.get(code)
+          target.current = op
+            ? clamp(
+                op
+                  .clone()
+                  .add(
+                    new THREE.Vector3(
+                      (Math.random() - 0.5) * 1.2,
+                      0,
+                      (Math.random() - 0.5) * 1.2
+                    )
+                  )
+              )
+            : clamp(
+                home
+                  .clone()
+                  .add(
+                    new THREE.Vector3(
+                      (Math.random() - 0.5) * pers.wander * 2,
+                      0,
+                      (Math.random() - 0.5) * pers.wander * 2
+                    )
+                  )
+              )
+        } else {
+          const angle = Math.random() * Math.PI * 2
+          const dist = rand(1.5, pers.wander)
+          target.current = clamp(
+            home
+              .clone()
+              .add(
+                new THREE.Vector3(
+                  Math.cos(angle) * dist,
+                  0,
+                  Math.sin(angle) * dist
+                )
+              )
+          )
+        }
+        state.current = "MOVING"
       }
-    } else if (state === "talking") {
-      if (headRef.current) {
-        headRef.current.rotation.x = Math.sin(t * 2.5) * 0.08
-        headRef.current.rotation.y = Math.sin(t * 1.3) * 0.05
+      return
+    }
+
+    // ── MOVING / RETURNING ────────────────────────────────
+    if (state.current === "MOVING" || state.current === "RETURNING") {
+      const dir = target.current.clone().sub(pos)
+      dir.y = 0
+      const dist = dir.length()
+
+      if (dist > 0.18) {
+        dir.normalize()
+        const sp = pers.speed * (state.current === "RETURNING" ? 0.75 : 1)
+        pos.x += dir.x * sp * dt
+        pos.z += dir.z * sp * dt
+        group.current.rotation.y = THREE.MathUtils.lerp(
+          group.current.rotation.y,
+          Math.atan2(dir.x, dir.z),
+          0.12
+        )
+
+        const wf = 6 * sp
+        if (lLeg.current) lLeg.current.rotation.x = Math.sin(t * wf) * 0.45
+        if (rLeg.current) rLeg.current.rotation.x = -Math.sin(t * wf) * 0.45
+        if (lArm.current) lArm.current.rotation.x = -Math.sin(t * wf) * 0.38
+        if (rArm.current) rArm.current.rotation.x = Math.sin(t * wf) * 0.38
+        group.current.position.y = Math.abs(Math.sin(t * wf)) * 0.035
+
+        if (state.current === "MOVING") {
+          for (const code of allCodes) {
+            if (code === agent.code) continue
+            const op = posRef.current.get(code)
+            if (op && op.distanceTo(pos) < TALK_DIST) {
+              partner.current = code
+              state.current = "TALKING"
+              timer.current = rand(pers.talkTime[0], pers.talkTime[1])
+              if (lLeg.current) lLeg.current.rotation.x = 0
+              if (rLeg.current) rLeg.current.rotation.x = 0
+              group.current.position.y = 0
+              break
+            }
+          }
+        }
+      } else {
+        if (lLeg.current) lLeg.current.rotation.x = 0
+        if (rLeg.current) rLeg.current.rotation.x = 0
+        if (lArm.current) lArm.current.rotation.x = 0
+        if (rArm.current) rArm.current.rotation.x = 0
+        group.current.position.y = 0
+
+        if (state.current === "RETURNING") {
+          state.current = "DESK"
+          timer.current = rand(pers.deskTime[0], pers.deskTime[1])
+        } else {
+          target.current = home.clone()
+          state.current = "RETURNING"
+        }
       }
-      if (rightArmRef.current)
-        rightArmRef.current.rotation.x = -0.4 + Math.sin(t * 1.8) * 0.15
-      if (leftArmRef.current) leftArmRef.current.rotation.x = 0
-      if (leftLegRef.current) leftLegRef.current.rotation.x = 0
-      if (rightLegRef.current) rightLegRef.current.rotation.x = 0
-      if (upperRef.current) upperRef.current.position.y = 0.85
-    } else {
-      // idle
-      if (upperRef.current)
-        upperRef.current.position.y = 0.85 + Math.sin(t * 1.2) * 0.04
-      if (headRef.current) {
-        headRef.current.rotation.x = 0
-        headRef.current.rotation.y = Math.sin(t * 0.6) * 0.12
+      return
+    }
+
+    // ── TALKING ───────────────────────────────────────────
+    if (state.current === "TALKING") {
+      const pp = partner.current ? posRef.current.get(partner.current) : null
+      if (pp) {
+        const dir = pp.clone().sub(pos)
+        if (dir.length() > 0.01) {
+          group.current.rotation.y = THREE.MathUtils.lerp(
+            group.current.rotation.y,
+            Math.atan2(dir.x, dir.z),
+            0.2
+          )
+        }
       }
-      if (leftLegRef.current) leftLegRef.current.rotation.x = 0
-      if (rightLegRef.current) rightLegRef.current.rotation.x = 0
-      if (leftArmRef.current) leftArmRef.current.rotation.x = 0
-      if (rightArmRef.current) rightArmRef.current.rotation.x = 0
+      if (lArm.current) lArm.current.rotation.x = Math.sin(t * 3.0) * 0.42 - 0.2
+      if (rArm.current)
+        rArm.current.rotation.x = Math.sin(t * 2.4 + 1.1) * 0.38 - 0.15
+      if (head.current) {
+        head.current.rotation.x = Math.sin(t * 2.2) * 0.09
+        head.current.rotation.y = Math.sin(t * 1.6) * 0.12
+      }
+      group.current.position.y = 0
+
+      if (timer.current <= 0) {
+        partner.current = null
+        if (head.current) {
+          head.current.rotation.x = 0
+          head.current.rotation.y = 0
+        }
+        target.current = home.clone()
+        state.current = "RETURNING"
+      }
     }
   })
 
+  const statusColor = {
+    active: "#22c55e",
+    signal: "#f59e0b",
+    scanning: "#60a5fa",
+    idle: "#6b7280",
+  }[agent.status]
+  const [sx, , sz] = agent.deskPosition
+
   return (
-    <group
-      ref={groupRef}
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick?.()
-      }}
-      onPointerOver={(e) => {
-        e.stopPropagation()
-        document.body.style.cursor = "pointer"
-      }}
-      onPointerOut={() => {
-        document.body.style.cursor = "default"
-      }}
-    >
-      {/* Legs — children of root so they stay planted while upper body bobs */}
-      <group ref={leftLegRef} position={[-0.15, 0.4, 0]}>
-        <mesh castShadow position={[0, -0.4, 0]}>
-          <boxGeometry args={[0.22, 0.8, 0.22]} />
-          <meshStandardMaterial color="#1f2230" roughness={0.7} />
-        </mesh>
-      </group>
-      <group ref={rightLegRef} position={[0.15, 0.4, 0]}>
-        <mesh castShadow position={[0, -0.4, 0]}>
-          <boxGeometry args={[0.22, 0.8, 0.22]} />
-          <meshStandardMaterial color="#1f2230" roughness={0.7} />
-        </mesh>
-      </group>
-
-      {/* Upper body — bobs during idle / walking */}
-      <group ref={upperRef} position={[0, 0.85, 0]}>
-        {/* Torso */}
-        <mesh castShadow>
-          <boxGeometry args={[0.7, 0.85, 0.42]} />
-          <meshStandardMaterial
-            color={accent}
-            emissive={accent}
-            emissiveIntensity={0.18}
-            roughness={0.55}
-            metalness={0.05}
-          />
-        </mesh>
-
-        {/* Left arm — pivoted at shoulder */}
-        <group ref={leftArmRef} position={[-0.45, 0.3, 0]}>
-          <mesh castShadow position={[0, -0.32, 0]}>
-            <boxGeometry args={[0.18, 0.7, 0.18]} />
-            <meshStandardMaterial color={skin} roughness={0.65} />
-          </mesh>
-        </group>
-        {/* Right arm */}
-        <group ref={rightArmRef} position={[0.45, 0.3, 0]}>
-          <mesh castShadow position={[0, -0.32, 0]}>
-            <boxGeometry args={[0.18, 0.7, 0.18]} />
-            <meshStandardMaterial color={skin} roughness={0.65} />
-          </mesh>
-        </group>
-
-        {/* Head group — nods + turns */}
-        <group ref={headRef} position={[0, 0.7, 0]}>
-          <mesh castShadow>
-            <sphereGeometry args={[0.32, 24, 16]} />
-            <meshStandardMaterial color={skin} roughness={0.6} />
-          </mesh>
-          {/* Hair slab on top + back */}
-          <mesh castShadow position={[0, 0.16, -0.05]}>
-            <boxGeometry args={[0.6, 0.18, 0.55]} />
-            <meshStandardMaterial color={hair} roughness={0.85} />
-          </mesh>
-          {/* Eyes */}
-          <mesh position={[-0.1, 0.02, 0.3]}>
-            <sphereGeometry args={[0.04, 12, 8]} />
-            <meshStandardMaterial color="#0a0a0a" roughness={0.3} />
-          </mesh>
-          <mesh position={[0.1, 0.02, 0.3]}>
-            <sphereGeometry args={[0.04, 12, 8]} />
-            <meshStandardMaterial color="#0a0a0a" roughness={0.3} />
-          </mesh>
-        </group>
-      </group>
-
-      {/* Ground halo — per-agent accent glow */}
-      <pointLight
-        position={[0, 0.05, 0]}
-        intensity={0.4}
-        distance={2.4}
-        color={accent}
-      />
-
-      {/* Codename label above head */}
-      <Html
-        position={[0, 2.2, 0]}
-        center
-        distanceFactor={9}
-        style={{ pointerEvents: "none", userSelect: "none" }}
+    <group ref={group} position={[sx, 0, sz]} onClick={() => onSelect(agent)}>
+      {/* Floor glow ring */}
+      <mesh
+        ref={glowRing}
+        position={[0, 0.005, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
       >
-        <div
-          style={{
-            fontFamily:
-              "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace",
-            fontSize: "10px",
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: accent,
-            background: "rgba(10,10,15,0.85)",
-            border: `1px solid ${accent}55`,
-            borderRadius: "9999px",
-            padding: "2px 8px",
-            whiteSpace: "nowrap",
-            textShadow: "0 0 8px rgba(0,0,0,0.85)",
-            backdropFilter: "blur(4px)",
-          }}
+        <ringGeometry args={[0.22, 0.42, 32]} />
+        <meshBasicMaterial color={agent.color} transparent opacity={0.18} />
+      </mesh>
+
+      {/* Left leg + shoe */}
+      <group ref={lLeg} position={[-0.1, 0.3, 0]}>
+        <mesh>
+          <capsuleGeometry args={[0.063, 0.28, 4, 8]} />
+          <meshStandardMaterial color="#1a1a2e" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, -0.2, 0.05]}>
+          <boxGeometry args={[0.1, 0.06, 0.17]} />
+          <meshStandardMaterial color="#0d0d0d" metalness={0.3} roughness={0.5} />
+        </mesh>
+      </group>
+
+      {/* Right leg + shoe */}
+      <group ref={rLeg} position={[0.1, 0.3, 0]}>
+        <mesh>
+          <capsuleGeometry args={[0.063, 0.28, 4, 8]} />
+          <meshStandardMaterial color="#1a1a2e" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, -0.2, 0.05]}>
+          <boxGeometry args={[0.1, 0.06, 0.17]} />
+          <meshStandardMaterial color="#0d0d0d" metalness={0.3} roughness={0.5} />
+        </mesh>
+      </group>
+
+      {/* Torso */}
+      <mesh position={[0, 0.62, 0]}>
+        <capsuleGeometry args={[0.135, 0.27, 4, 8]} />
+        <meshStandardMaterial
+          color={agent.color + "77"}
+          emissive={new THREE.Color(agent.color)}
+          emissiveIntensity={0.07}
+          roughness={0.7}
+        />
+      </mesh>
+
+      {/* Shirt accent stripe */}
+      <mesh position={[0, 0.67, 0.135]}>
+        <boxGeometry args={[0.07, 0.19, 0.01]} />
+        <meshStandardMaterial
+          color={agent.color}
+          emissive={new THREE.Color(agent.color)}
+          emissiveIntensity={0.5}
+          roughness={0.3}
+        />
+      </mesh>
+
+      {/* Left arm + hand */}
+      <group ref={lArm} position={[-0.2, 0.68, 0]}>
+        <mesh>
+          <capsuleGeometry args={[0.053, 0.21, 4, 8]} />
+          <meshStandardMaterial color={agent.color + "77"} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.16, 0]}>
+          <sphereGeometry args={[0.055, 8, 8]} />
+          <meshStandardMaterial color="#c8a07a" roughness={0.9} />
+        </mesh>
+      </group>
+
+      {/* Right arm + hand */}
+      <group ref={rArm} position={[0.2, 0.68, 0]}>
+        <mesh>
+          <capsuleGeometry args={[0.053, 0.21, 4, 8]} />
+          <meshStandardMaterial color={agent.color + "77"} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.16, 0]}>
+          <sphereGeometry args={[0.055, 8, 8]} />
+          <meshStandardMaterial color="#c8a07a" roughness={0.9} />
+        </mesh>
+      </group>
+
+      {/* Head */}
+      <mesh ref={head} position={[0, 0.97, 0]}>
+        <sphereGeometry args={[0.135, 16, 16]} />
+        <meshStandardMaterial color="#c8a07a" roughness={0.9} />
+      </mesh>
+
+      {/* Eyes */}
+      {([-0.052, 0.052] as const).map((x, i) => (
+        <mesh key={i} position={[x, 1.0, 0.127]}>
+          <sphereGeometry args={[0.02, 8, 8]} />
+          <meshBasicMaterial color="#180800" />
+        </mesh>
+      ))}
+
+      {/* Status dot on forehead */}
+      <mesh position={[0, 1.09, 0.125]}>
+        <sphereGeometry args={[0.018, 8, 8]} />
+        <meshBasicMaterial color={statusColor} />
+      </mesh>
+
+      {/* Floating name tag */}
+      <Billboard position={[0, 1.45, 0]}>
+        <mesh position={[0, 0, -0.007]}>
+          <planeGeometry args={[0.72, 0.23]} />
+          <meshBasicMaterial color={agent.color} transparent opacity={0.5} />
+        </mesh>
+        <mesh position={[0, 0, -0.004]}>
+          <planeGeometry args={[0.7, 0.21]} />
+          <meshBasicMaterial color="#040410" transparent opacity={0.9} />
+        </mesh>
+        <Text
+          fontSize={0.1}
+          color={agent.color}
+          anchorX="center"
+          anchorY="middle"
+          position={[0, 0.035, 0]}
         >
-          {agent.name}
-        </div>
-      </Html>
+          {agent.isNova ? `${agent.name} 👑` : agent.name}
+        </Text>
+        <Text
+          fontSize={0.06}
+          color="#ffffff55"
+          anchorX="center"
+          anchorY="middle"
+          position={[0, -0.062, 0]}
+        >
+          {agent.specialty}
+        </Text>
+      </Billboard>
+
+      {/* Selected ring */}
+      {selected && (
+        <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.4, 0.56, 48]} />
+          <meshBasicMaterial color={agent.color} transparent opacity={0.7} />
+        </mesh>
+      )}
     </group>
   )
 }
+
+// Backwards-compat default export — older code imports `AgentFigure`.
+export const AgentFigure = AgentCharacter
+export default AgentCharacter
+export type AgentState = S

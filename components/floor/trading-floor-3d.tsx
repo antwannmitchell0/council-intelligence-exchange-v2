@@ -1,623 +1,374 @@
+// Ported from v1 council-exchange/components/floor/TradingFloor3D.tsx.
+// All sub-components — FloorGrid, BackWall, Walls, CeilingLights,
+// WorkStations, DataParticles, DataStreams, Stars — are preserved verbatim.
+//
+// Adaptations from v1:
+//   - Accepts agents from props instead of importing static COUNCIL_AGENTS.
+//   - Lane labels on the desk grid kept generic (not hardcoded to v1's
+//     "CRYPTO DESK / EQUITIES / …") since v2's specialty mapping is
+//     different.
+//   - The Canvas wrapper lives in floor-client.tsx now; this file
+//     exports the Scene contents only.
+
 "use client"
 
-import { Html, OrbitControls, Text } from "@react-three/drei"
+import { useRef } from "react"
 import { useFrame } from "@react-three/fiber"
-import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  Environment,
+  Grid,
+  OrbitControls,
+  Stars,
+  Text,
+} from "@react-three/drei"
 import * as THREE from "three"
-import { AgentFigure, type AgentState as FigureState } from "./agent-figure"
-import type { AgentRow } from "@/lib/supabase/types"
+import { AgentCharacter } from "./agent-figure"
+import { ActiveBeams } from "./connection-beams"
+import type { CouncilAgent } from "@/lib/floor/agents-data"
 
-type Props = {
-  agents: AgentRow[]
-  // Called when a desk is clicked. If unset, the component falls back to
-  // the legacy router.push(`/agents/{id}`) navigation.
-  onAgentClick?: (agent_id: string) => void
+interface Props {
+  agents: CouncilAgent[]
+  selectedAgent: CouncilAgent | null
+  onSelectAgent: (agent: CouncilAgent | null) => void
 }
 
-// Horseshoe opens toward +Z (front/camera).
-// Angles: 45° → 315° going through 180° (back), a 270° arc.
-// angle=45°  → right-front, angle=180° → back-center, angle=315° → left-front
-const HORSESHOE_START_DEG = 45
-const HORSESHOE_SPAN_DEG = 270
-const INNER_RADIUS = 6.2
-const OUTER_RADIUS = 9.8
-const INNER_MAX = 11
+// Lane labels on the desk grid — generic v2 categories, positioned at
+// each desk slot so visitors see what each desk is "for".
+const LANE_LABELS: Array<{ pos: [number, number, number]; label: string }> = [
+  { pos: [-7.5, 0, -4], label: "INSTITUTIONAL" },
+  { pos: [-4.5, 0, -4], label: "ON-CHAIN" },
+  { pos: [-1.5, 0, -4], label: "CATALYSTS" },
+  { pos: [1.5, 0, -4], label: "MONETARY" },
+  { pos: [4.5, 0, -4], label: "EMPLOYMENT" },
+  { pos: [7.5, 0, -4], label: "GLOBAL" },
+  { pos: [-6, 0, 0], label: "INSIDER" },
+  { pos: [-3, 0, 0], label: "Δ POSITIONS" },
+  { pos: [0, 0, 0], label: "CONGRESS" },
+  { pos: [3, 0, 0], label: "RATES" },
+  { pos: [6, 0, 0], label: "ATTENTION" },
+]
 
-interface DeskData {
-  agent: AgentRow
-  angle: number
-  x: number
-  z: number
-  radius: number
-}
-
-function ring(agents: AgentRow[], radius: number): DeskData[] {
-  return agents.map((agent, i) => {
-    const frac = agents.length > 1 ? i / (agents.length - 1) : 0.5
-    const deg = HORSESHOE_START_DEG + frac * HORSESHOE_SPAN_DEG
-    const angle = (deg * Math.PI) / 180
-    return { agent, angle, x: radius * Math.sin(angle), z: radius * Math.cos(angle), radius }
-  })
-}
-
-function computeDesks(agents: AgentRow[]): DeskData[] {
-  const sorted = [...agents].sort((a, b) => {
-    if (a.status === "verified" && b.status !== "verified") return -1
-    if (a.status !== "verified" && b.status === "verified") return 1
-    return a.name.localeCompare(b.name)
-  })
-  const inner = sorted.slice(0, Math.min(INNER_MAX, sorted.length))
-  const outer = sorted.slice(inner.length)
-  return [...ring(inner, INNER_RADIUS), ...(outer.length ? ring(outer, OUTER_RADIUS) : [])]
-}
-
-function Desk({
-  data,
-  isHovered,
-  onHover,
-  onClick,
-}: {
-  data: DeskData
-  isHovered: boolean
-  onHover: (v: boolean) => void
-  onClick: () => void
-}) {
-  const { agent, angle, x, z } = data
-  const isVerified = agent.status === "verified"
-  const glowColor = isVerified ? agent.hex : "#3A3D50"
-  const deskColor = isVerified ? "#1C2030" : "#12131A"
-
-  return (
-    <group position={[x, 0.07, z]} rotation={[0, angle, 0]}>
-      {/* Desk surface */}
-      <mesh
-        castShadow
-        receiveShadow
-        onClick={(e) => {
-          e.stopPropagation()
-          onClick()
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          onHover(true)
-          document.body.style.cursor = "pointer"
-        }}
-        onPointerOut={() => {
-          onHover(false)
-          document.body.style.cursor = "default"
-        }}
-      >
-        <boxGeometry args={[2.1, 0.11, 1.1]} />
-        <meshStandardMaterial
-          color={deskColor}
-          emissive={isVerified ? glowColor : "#000000"}
-          emissiveIntensity={isVerified ? 0.08 : 0}
-          roughness={0.35}
-          metalness={0.15}
-        />
-      </mesh>
-
-      {/* Monitor screen — plane mesh, emissive */}
-      <mesh position={[0, 0.48, -0.38]} castShadow>
-        <planeGeometry args={[0.95, 0.56]} />
-        <meshStandardMaterial
-          color="#0A0B0F"
-          emissive={isVerified ? agent.hex : "#1A1B22"}
-          emissiveIntensity={isVerified ? 0.55 : 0.06}
-          roughness={0.1}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      {/* Monitor bezel */}
-      <mesh position={[0, 0.48, -0.41]}>
-        <boxGeometry args={[1.04, 0.64, 0.05]} />
-        <meshStandardMaterial color="#0A0B0F" roughness={0.5} metalness={0.3} />
-      </mesh>
-      {/* Monitor stand */}
-      <mesh position={[0, 0.2, -0.37]}>
-        <boxGeometry args={[0.16, 0.2, 0.16]} />
-        <meshStandardMaterial color="#12131A" />
-      </mesh>
-
-      {/* Chair seat */}
-      <mesh position={[0, 0.18, 0.72]} castShadow>
-        <boxGeometry args={[0.82, 0.07, 0.82]} />
-        <meshStandardMaterial color="#12131A" roughness={0.8} />
-      </mesh>
-      {/* Chair back */}
-      <mesh position={[0, 0.52, 1.06]} castShadow>
-        <boxGeometry args={[0.82, 0.6, 0.07]} />
-        <meshStandardMaterial color="#12131A" roughness={0.8} />
-      </mesh>
-
-      {/* Per-desk point light (verified only) */}
-      {isVerified ? (
-        <pointLight position={[0, 0.7, 0]} distance={3.2} intensity={0.5} color={glowColor} />
-      ) : null}
-
-      {/* Agent name on monitor — always faces camera */}
-      <Html
-        position={[0, 0.52, -0.36]}
-        center
-        distanceFactor={4.5}
-        style={{ pointerEvents: "none" }}
-      >
-        <div
-          style={{
-            fontFamily: "monospace",
-            fontSize: "7px",
-            textTransform: "uppercase",
-            letterSpacing: "0.14em",
-            color: isVerified ? agent.hex : "#4F5260",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          {agent.name}
-        </div>
-      </Html>
-
-      {/* Hover tooltip */}
-      {isHovered ? (
-        <Html
-          position={[0, 2.5, 0]}
-          center
-          distanceFactor={8}
-          style={{ pointerEvents: "none" }}
-        >
-          <div
-            style={{
-              fontFamily: "monospace",
-              fontSize: "10px",
-              textTransform: "uppercase",
-              letterSpacing: "0.18em",
-              color: isVerified ? agent.hex : "#8A8D9A",
-              whiteSpace: "nowrap",
-              background: "rgba(10,10,15,0.92)",
-              border: `1px solid ${isVerified ? agent.hex + "55" : "#1C1E2888"}`,
-              borderRadius: "9999px",
-              padding: "3px 10px",
-              backdropFilter: "blur(6px)",
-              pointerEvents: "none",
-            }}
-          >
-            {agent.name} · {isVerified ? "verified" : "in verification"}
-          </div>
-        </Html>
-      ) : null}
-    </group>
-  )
-}
-
-// ---- Walking + talking FSM -----------------------------------------------
-//
-// Each agent has a small state machine that periodically initiates a meet
-// with another agent: walks from the desk → midpoint → talks for a few
-// seconds → walks back. Position interpolation runs in useFrame and
-// mutates a ref directly (no React re-renders per frame). FigureState
-// transitions trigger React re-renders so AgentFigure swaps limb-pose
-// animations.
-
-type AgentLogic = {
-  id: string
-  agent: AgentRow
-  // Home (chair-side of desk) world position.
-  homeX: number
-  homeZ: number
-  homeYaw: number // facing the desk monitor
-  // Live position + target.
-  x: number
-  z: number
-  targetX: number
-  targetZ: number
-  yaw: number
-  // FSM
-  mode: "at_desk" | "walking_out" | "talking" | "walking_back"
-  partnerId: string | null
-  nextDecisionAt: number
-  talkUntil: number
-}
-
-const TALK_DURATION_MS = 6000
-const DECISION_COOLDOWN_MIN_MS = 6000
-const DECISION_COOLDOWN_MAX_MS = 18000
-const WALK_SPEED = 0.04
-
-export function TradingFloor3D({ agents, onAgentClick }: Props) {
-  const router = useRouter()
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const desks = useMemo(() => computeDesks(agents), [agents])
-
-  // Per-agent live logic — refs so 60fps updates don't churn React.
-  const logicRef = useRef<Map<string, AgentLogic>>(new Map())
-  // Display-state map — drives AgentFigure's limb animation. Updated only
-  // on transition (every few seconds), not per frame.
-  const [displayState, setDisplayState] = useState<Record<string, FigureState>>(
-    {}
-  )
-  // Group refs per agent — parent's useFrame mutates these directly.
-  const groupRefs = useRef<Map<string, THREE.Group>>(new Map())
-  // Tick state to force render (~10Hz throttle so position-derived
-  // overlays + connection threads stay fresh without 60fps re-renders).
-  const [, setTick] = useState(0)
-  const lastTickRef = useRef(0)
-
-  // Initialize logic state once desks are known.
-  useEffect(() => {
-    const next = new Map<string, AgentLogic>()
-    const now = Date.now()
-    for (const d of desks) {
-      const agentR = d.radius + 1.12
-      const homeX = agentR * Math.sin(d.angle)
-      const homeZ = agentR * Math.cos(d.angle)
-      // Face the desk monitor — opposite of outward radius angle.
-      const homeYaw = Math.atan2(-homeX, -homeZ)
-      const prev = logicRef.current.get(d.agent.id)
-      next.set(d.agent.id, {
-        id: d.agent.id,
-        agent: d.agent,
-        homeX,
-        homeZ,
-        homeYaw,
-        x: prev?.x ?? homeX,
-        z: prev?.z ?? homeZ,
-        targetX: prev?.targetX ?? homeX,
-        targetZ: prev?.targetZ ?? homeZ,
-        yaw: prev?.yaw ?? homeYaw,
-        mode: prev?.mode ?? "at_desk",
-        partnerId: prev?.partnerId ?? null,
-        nextDecisionAt:
-          prev?.nextDecisionAt ??
-          now + DECISION_COOLDOWN_MIN_MS + Math.random() * 8000,
-        talkUntil: prev?.talkUntil ?? 0,
-      })
-    }
-    logicRef.current = next
-    // Seed display states.
-    const ds: Record<string, FigureState> = {}
-    for (const id of next.keys()) ds[id] = "idle"
-    setDisplayState(ds)
-  }, [desks])
-
-  // Per-frame: update positions, transition state machines, mutate group
-  // transforms directly.
-  useFrame(() => {
-    const now = Date.now()
-    const states = logicRef.current
-    if (states.size === 0) return
-
-    let stateChanged = false
-    const idsArray = Array.from(states.keys())
-
-    for (const s of states.values()) {
-      switch (s.mode) {
-        case "at_desk":
-          if (now >= s.nextDecisionAt) {
-            // Pick another idle agent who isn't already paired.
-            const candidates = idsArray.filter((id) => {
-              if (id === s.id) return false
-              const o = states.get(id)
-              return !!o && o.mode === "at_desk" && o.partnerId === null
-            })
-            if (candidates.length > 0) {
-              const partnerId =
-                candidates[Math.floor(Math.random() * candidates.length)]
-              const partner = states.get(partnerId)!
-              // Midpoint between two desks.
-              const midX = (s.homeX + partner.homeX) / 2
-              const midZ = (s.homeZ + partner.homeZ) / 2
-              // Stagger so they don't overlap exactly — offset perpendicular
-              // to their connecting line.
-              const dx = partner.homeX - s.homeX
-              const dz = partner.homeZ - s.homeZ
-              const len = Math.hypot(dx, dz) || 1
-              const perpX = -dz / len
-              const perpZ = dx / len
-              const offset = 0.55
-              s.targetX = midX + perpX * offset
-              s.targetZ = midZ + perpZ * offset
-              s.partnerId = partnerId
-              s.mode = "walking_out"
-
-              partner.targetX = midX - perpX * offset
-              partner.targetZ = midZ - perpZ * offset
-              partner.partnerId = s.id
-              partner.mode = "walking_out"
-
-              stateChanged = true
-            } else {
-              // Push decision out a bit if no partner available.
-              s.nextDecisionAt =
-                now + 4000 + Math.random() * 6000
-            }
-          }
-          break
-        case "walking_out": {
-          const dx = s.targetX - s.x
-          const dz = s.targetZ - s.z
-          const dist = Math.hypot(dx, dz)
-          if (dist < 0.06) {
-            s.x = s.targetX
-            s.z = s.targetZ
-            s.mode = "talking"
-            s.talkUntil = now + TALK_DURATION_MS
-            stateChanged = true
-          } else {
-            // Face the walking direction.
-            s.yaw = Math.atan2(dx, dz)
-            s.x += dx * WALK_SPEED
-            s.z += dz * WALK_SPEED
-          }
-          break
-        }
-        case "talking": {
-          // Face the partner.
-          if (s.partnerId) {
-            const p = states.get(s.partnerId)
-            if (p) {
-              s.yaw = Math.atan2(p.x - s.x, p.z - s.z)
-            }
-          }
-          if (now >= s.talkUntil) {
-            s.mode = "walking_back"
-            s.targetX = s.homeX
-            s.targetZ = s.homeZ
-            stateChanged = true
-          }
-          break
-        }
-        case "walking_back": {
-          const dx = s.targetX - s.x
-          const dz = s.targetZ - s.z
-          const dist = Math.hypot(dx, dz)
-          if (dist < 0.06) {
-            s.x = s.homeX
-            s.z = s.homeZ
-            s.yaw = s.homeYaw
-            s.mode = "at_desk"
-            s.partnerId = null
-            s.nextDecisionAt =
-              now +
-              DECISION_COOLDOWN_MIN_MS +
-              Math.random() *
-                (DECISION_COOLDOWN_MAX_MS - DECISION_COOLDOWN_MIN_MS)
-            stateChanged = true
-          } else {
-            s.yaw = Math.atan2(dx, dz)
-            s.x += dx * WALK_SPEED
-            s.z += dz * WALK_SPEED
-          }
-          break
-        }
-      }
-
-      // Mutate group transform directly — no React re-render needed.
-      const g = groupRefs.current.get(s.id)
-      if (g) {
-        g.position.set(s.x, 0, s.z)
-        g.rotation.y = s.yaw
-      }
-    }
-
-    // Sync display state when transitions happened.
-    if (stateChanged) {
-      const next: Record<string, FigureState> = {}
-      for (const s of states.values()) {
-        next[s.id] =
-          s.mode === "talking"
-            ? "talking"
-            : s.mode === "walking_out" || s.mode === "walking_back"
-            ? "walking"
-            : "idle"
-      }
-      setDisplayState(next)
-    }
-
-    // Throttled tick to refresh derived overlays (connection threads).
-    if (now - lastTickRef.current > 100) {
-      lastTickRef.current = now
-      setTick((t) => (t + 1) % 10000)
-    }
-  })
-
-  // Build talking-pair connection threads from current logic state.
-  const threads: Array<{
-    from: [number, number, number]
-    to: [number, number, number]
-  }> = []
-  const visited = new Set<string>()
-  for (const s of logicRef.current.values()) {
-    if (s.mode !== "talking" || !s.partnerId) continue
-    if (visited.has(s.id)) continue
-    const p = logicRef.current.get(s.partnerId)
-    if (!p || p.mode !== "talking") continue
-    visited.add(s.id)
-    visited.add(s.partnerId)
-    threads.push({
-      from: [s.x, 1.7, s.z],
-      to: [p.x, 1.7, p.z],
-    })
-  }
-
+function FloorGrid() {
   return (
     <>
-      {/* Dark reflective floor */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-        <planeGeometry args={[90, 90]} />
-        <meshStandardMaterial
-          color="#0a0a0f"
-          roughness={0.08}
-          metalness={0.72}
-        />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
+        <planeGeometry args={[50, 40]} />
+        <meshStandardMaterial color="#050508" metalness={0.8} roughness={0.4} />
       </mesh>
-
-      {/* Floor grid lines */}
-      <gridHelper args={[90, 45, "#0a1c1c", "#0d1818"]} position={[0, 0.003, 0]} />
-      <gridHelper args={[90, 9, "#133030", "#133030"]} position={[0, 0.005, 0]} />
-
-      {/* Backdrop wall — massive gold "THE COUNCIL · INTELLIGENCE EXCHANGE" */}
-      <group position={[0, 0, -16]}>
-        {/* Subtle dark plane behind the text for contrast */}
-        <mesh position={[0, 5, -0.2]} receiveShadow>
-          <planeGeometry args={[36, 12]} />
-          <meshStandardMaterial
-            color="#050508"
-            roughness={0.85}
-            metalness={0.1}
-          />
-        </mesh>
-        <Text
-          position={[0, 6.2, 0]}
-          fontSize={2.4}
-          color="#c9a84c"
-          anchorX="center"
-          anchorY="middle"
-          letterSpacing={0.04}
-          outlineColor="#1a1408"
-          outlineWidth={0.02}
-        >
-          THE COUNCIL
-          <meshStandardMaterial
-            attach="material"
-            color="#c9a84c"
-            emissive="#c9a84c"
-            emissiveIntensity={0.45}
-            roughness={0.6}
-            metalness={0.4}
-          />
-        </Text>
-        <Text
-          position={[0, 4.0, 0]}
-          fontSize={0.95}
-          color="#c9a84c"
-          anchorX="center"
-          anchorY="middle"
-          letterSpacing={0.32}
-        >
-          INTELLIGENCE EXCHANGE
-          <meshStandardMaterial
-            attach="material"
-            color="#c9a84c"
-            emissive="#c9a84c"
-            emissiveIntensity={0.32}
-            roughness={0.7}
-          />
-        </Text>
-        {/* A faint underline glow rule */}
-        <mesh position={[0, 3.45, 0.01]}>
-          <planeGeometry args={[12, 0.04]} />
-          <meshStandardMaterial
-            color="#c9a84c"
-            emissive="#c9a84c"
-            emissiveIntensity={0.6}
-          />
-        </mesh>
-      </group>
-
-      {/* Fog */}
-      <fog attach="fog" args={["#0a0a0f", 24, 46]} />
-
-      {/* Lights */}
-      <ambientLight intensity={0.22} />
-      <directionalLight
-        position={[0, 20, 10]}
-        intensity={0.5}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        color="#B8C8FF"
-      />
-      {/* Gold accent above the backdrop */}
-      <pointLight position={[0, 11, -12]} intensity={1.0} distance={20} color="#c9a84c" />
-      {/* Violet overhead */}
-      <pointLight position={[0, 12, 0]} intensity={1.0} distance={26} color="#7C5CFF" />
-      {/* Cyan front fill */}
-      <pointLight position={[0, 5, 14]} intensity={0.4} distance={22} color="#29E6D1" />
-
-      {/* Desks */}
-      {desks.map((d) => (
-        <Desk
-          key={d.agent.id}
-          data={d}
-          isHovered={hoveredId === d.agent.id}
-          onHover={(v) => setHoveredId(v ? d.agent.id : null)}
-          onClick={() =>
-            onAgentClick
-              ? onAgentClick(d.agent.id)
-              : router.push(`/agents/${d.agent.id}`)
-          }
-        />
-      ))}
-
-      {/* Humanoid agent figures — all 11, FSM-driven walk/talk/idle */}
-      {desks.map((d, i) => (
-        <group
-          key={d.agent.id}
-          ref={(node) => {
-            if (node) groupRefs.current.set(d.agent.id, node)
-            else groupRefs.current.delete(d.agent.id)
-          }}
-        >
-          <AgentFigure
-            agent={d.agent}
-            position={[0, 0, 0]} /* outer group transform handled by parent */
-            rotationY={0}
-            phase={i * 0.83}
-            state={displayState[d.agent.id] ?? "idle"}
-            onClick={() =>
-              onAgentClick
-                ? onAgentClick(d.agent.id)
-                : router.push(`/agents/${d.agent.id}`)
-            }
-          />
-        </group>
-      ))}
-
-      {/* Connection threads between talking pairs */}
-      {threads.map((t, i) => (
-        <Line key={i} from={t.from} to={t.to} color="#29E6D1" />
-      ))}
-
-      <OrbitControls
-        makeDefault
-        enableDamping
-        dampingFactor={0.08}
-        minDistance={7}
-        maxDistance={30}
-        minPolarAngle={0.15}
-        maxPolarAngle={Math.PI / 2 - 0.05}
-        target={[0, 1, 0]}
+      <Grid
+        position={[0, 0, 0]}
+        args={[50, 40]}
+        cellSize={1}
+        cellThickness={0.3}
+        cellColor="#c9a84c0a"
+        sectionSize={5}
+        sectionThickness={0.8}
+        sectionColor="#c9a84c1a"
+        fadeDistance={35}
+        fadeStrength={1}
+        infiniteGrid={false}
       />
     </>
   )
 }
 
-// Simple line segment between two world points — used to visualize the
-// connection between two talking agents.
-function Line({
-  from,
-  to,
-  color,
-}: {
-  from: [number, number, number]
-  to: [number, number, number]
-  color: string
-}) {
-  const ref = useRef<THREE.BufferGeometry>(null)
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.setFromPoints([
-        new THREE.Vector3(...from),
-        new THREE.Vector3(...to),
-      ])
-    }
-  }, [from, to])
+function WorkStations() {
   return (
-    <line>
-      <bufferGeometry ref={ref} />
-      <lineBasicMaterial color={color} linewidth={2} transparent opacity={0.55} />
-    </line>
+    <>
+      {LANE_LABELS.map(({ pos, label }) => (
+        <group key={label} position={pos}>
+          {/* Desk surface */}
+          <mesh position={[0, 0.38, 0]}>
+            <boxGeometry args={[1.8, 0.06, 0.9]} />
+            <meshStandardMaterial color="#0d0d18" metalness={0.7} roughness={0.3} />
+          </mesh>
+          {/* Desk glow edge */}
+          <mesh position={[0, 0.41, 0]}>
+            <boxGeometry args={[1.82, 0.01, 0.92]} />
+            <meshBasicMaterial color="#c9a84c" transparent opacity={0.15} />
+          </mesh>
+          {/* Monitor */}
+          <mesh position={[0, 0.85, -0.35]}>
+            <boxGeometry args={[1.2, 0.75, 0.04]} />
+            <meshStandardMaterial
+              color="#050510"
+              emissive={new THREE.Color("#0a1628")}
+              emissiveIntensity={0.6}
+              metalness={0.3}
+              roughness={0.8}
+            />
+          </mesh>
+          <pointLight
+            position={[0, 0.85, -0.2]}
+            intensity={0.3}
+            distance={2}
+            color="#4060ff"
+          />
+          {/* Keyboard */}
+          <mesh position={[0, 0.42, 0.05]}>
+            <boxGeometry args={[0.9, 0.02, 0.3]} />
+            <meshStandardMaterial color="#0a0a18" metalness={0.5} roughness={0.6} />
+          </mesh>
+          {/* Desk lane label */}
+          <Text
+            position={[0, 0.55, 0.46]}
+            fontSize={0.08}
+            color="#c9a84c88"
+            anchorX="center"
+            anchorY="middle"
+            rotation={[-0.3, 0, 0]}
+          >
+            {label}
+          </Text>
+        </group>
+      ))}
+    </>
+  )
+}
+
+function DataStreams() {
+  const streamRef = useRef<THREE.Group>(null)
+  useFrame((state) => {
+    if (streamRef.current) {
+      streamRef.current.children.forEach((child, i) => {
+        child.position.y =
+          ((state.clock.getElapsedTime() * 0.3 + i * 0.7) % 4) - 0.5
+        const mat = (child as THREE.Mesh).material as
+          | THREE.MeshBasicMaterial
+          | undefined
+        if (mat) {
+          mat.opacity =
+            0.3 + Math.sin(state.clock.getElapsedTime() + i) * 0.2
+        }
+      })
+    }
+  })
+
+  return (
+    <group ref={streamRef}>
+      {Array.from({ length: 12 }).map((_, i) => (
+        <mesh
+          key={i}
+          position={[
+            (Math.random() - 0.5) * 18,
+            0,
+            (Math.random() - 0.5) * 10,
+          ]}
+        >
+          <planeGeometry args={[0.02, 0.4]} />
+          <meshBasicMaterial color="#c9a84c" transparent opacity={0.3} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function DataParticles() {
+  const pointsRef = useRef<THREE.Points>(null)
+  const count = 300
+  const positions = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 22
+    positions[i * 3 + 1] = Math.random() * 5
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 14
+  }
+
+  useFrame((state) => {
+    if (pointsRef.current) {
+      pointsRef.current.rotation.y = state.clock.getElapsedTime() * 0.008
+    }
+  })
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        size={0.025}
+        color="#c9a84c"
+        transparent
+        opacity={0.35}
+        sizeAttenuation
+      />
+    </points>
+  )
+}
+
+function BackWall() {
+  const ref = useRef<THREE.Mesh>(null)
+  useFrame((state) => {
+    if (ref.current) {
+      ;(ref.current.material as THREE.MeshBasicMaterial).opacity =
+        0.06 + Math.sin(state.clock.getElapsedTime() * 0.5) * 0.02
+    }
+  })
+  return (
+    <group position={[0, 2, -8]}>
+      <mesh>
+        <planeGeometry args={[24, 9]} />
+        <meshStandardMaterial color="#06060f" metalness={0.3} roughness={0.8} />
+      </mesh>
+      {/* Scan lines */}
+      {Array.from({ length: 9 }).map((_, i) => (
+        <mesh
+          ref={i === 0 ? ref : undefined}
+          key={i}
+          position={[0, i - 4, 0.01]}
+        >
+          <planeGeometry args={[22, 0.008]} />
+          <meshBasicMaterial color="#c9a84c" transparent opacity={0.06} />
+        </mesh>
+      ))}
+      {/* THE COUNCIL gold text */}
+      <Text
+        position={[0, 1.5, 0.1]}
+        fontSize={0.9}
+        color="#c9a84c"
+        anchorX="center"
+        anchorY="middle"
+        letterSpacing={0.15}
+      >
+        THE COUNCIL
+      </Text>
+      <Text
+        position={[0, 0.4, 0.1]}
+        fontSize={0.32}
+        color="#ffffff22"
+        anchorX="center"
+        anchorY="middle"
+        letterSpacing={0.3}
+      >
+        INTELLIGENCE EXCHANGE
+      </Text>
+      {/* Underline rule */}
+      <mesh position={[0, -0.1, 0.1]}>
+        <planeGeometry args={[8, 0.015]} />
+        <meshBasicMaterial color="#c9a84c" transparent opacity={0.4} />
+      </mesh>
+    </group>
+  )
+}
+
+function Walls() {
+  return (
+    <>
+      <mesh position={[-13, 2, -2]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[16, 9]} />
+        <meshStandardMaterial color="#05050d" metalness={0.2} roughness={0.9} />
+      </mesh>
+      <mesh position={[13, 2, -2]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[16, 9]} />
+        <meshStandardMaterial color="#05050d" metalness={0.2} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 5, -2]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[28, 18]} />
+        <meshStandardMaterial color="#030308" roughness={1} />
+      </mesh>
+    </>
+  )
+}
+
+function CeilingLights() {
+  const positions: Array<[number, number, number]> = [
+    [-7.5, 4.8, -4],
+    [-4.5, 4.8, -4],
+    [-1.5, 4.8, -4],
+    [1.5, 4.8, -4],
+    [4.5, 4.8, -4],
+    [7.5, 4.8, -4],
+    [-6, 4.8, 0],
+    [-3, 4.8, 0],
+    [0, 4.8, 0],
+    [3, 4.8, 0],
+    [6, 4.8, 0],
+  ]
+  return (
+    <>
+      {positions.map((pos, i) => (
+        <group key={i} position={pos}>
+          <mesh>
+            <cylinderGeometry args={[0.1, 0.08, 0.15, 8]} />
+            <meshStandardMaterial color="#111122" metalness={0.9} roughness={0.2} />
+          </mesh>
+          <pointLight intensity={0.6} distance={5} color="#c9a84c" decay={2} />
+          <mesh position={[0, -0.08, 0]}>
+            <circleGeometry args={[0.09, 16]} />
+            <meshBasicMaterial color="#ffe8a0" transparent opacity={0.9} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  )
+}
+
+export function TradingFloor3D({
+  agents,
+  selectedAgent,
+  onSelectAgent,
+}: Props) {
+  const posRef = useRef<Map<string, THREE.Vector3>>(new Map())
+  const allCodes = agents.map((a) => a.code)
+
+  return (
+    <>
+      {/* Lighting */}
+      <ambientLight intensity={0.12} />
+      <directionalLight
+        position={[8, 12, 6]}
+        intensity={0.25}
+        color="#c9a84c"
+        castShadow
+      />
+      <pointLight position={[0, 8, 0]} intensity={0.2} color="#0a0a20" />
+      <fog attach="fog" args={["#050508", 18, 40]} />
+
+      <Environment preset="night" />
+      <FloorGrid />
+      <BackWall />
+      <Walls />
+      <CeilingLights />
+      <WorkStations />
+      <DataParticles />
+      <DataStreams />
+      <Stars
+        radius={80}
+        depth={40}
+        count={1000}
+        factor={2}
+        saturation={0}
+        fade
+        speed={0.2}
+      />
+
+      {/* Beams between agents in proximity */}
+      <ActiveBeams agents={agents} posRef={posRef} />
+
+      {/* The 11 agent characters */}
+      {agents.map((agent) => (
+        <AgentCharacter
+          key={agent.code}
+          agent={agent}
+          selected={selectedAgent?.code === agent.code}
+          onSelect={(a) =>
+            onSelectAgent(selectedAgent?.code === a.code ? null : a)
+          }
+          posRef={posRef}
+          allCodes={allCodes}
+        />
+      ))}
+
+      <OrbitControls
+        minPolarAngle={Math.PI / 6}
+        maxPolarAngle={Math.PI / 2.1}
+        minDistance={4}
+        maxDistance={25}
+        enablePan={true}
+        panSpeed={0.5}
+        rotateSpeed={0.5}
+        zoomSpeed={0.8}
+        target={[0, 0.5, -2]}
+      />
+    </>
   )
 }
