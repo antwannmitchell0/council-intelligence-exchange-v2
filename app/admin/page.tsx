@@ -65,6 +65,18 @@ const sections: Section[] = [
           "Council Cron bot posts 🚨 red-bar alerts here when an agent run fails or throws.",
       },
       {
+        label: "Sentry — issues feed",
+        href: "https://demm.sentry.io/issues/?project=4511278262386688",
+        description:
+          "Uncaught exceptions, hydration errors, stack traces, session replays. Email on new issues.",
+      },
+      {
+        label: "Sentry — smoke test",
+        href: "/api/admin/sentry-test",
+        description:
+          "Deliberate throw — use periodically to confirm monitoring is still live end-to-end.",
+      },
+      {
         label: "Vercel project dashboard",
         href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2",
         description: "Deploys, env vars, crons, runtime logs.",

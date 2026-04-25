@@ -12,6 +12,7 @@
     "@base-ui/react": "^1.4.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
+    "@sentry/nextjs": "^10.50.0",
     "@supabase/supabase-js": "^2.104.0",
     "@tanstack/react-virtual": "^3.13.24",
     "@vercel/analytics": "^2.0.1",
