@@ -44,6 +44,11 @@ export const config: VercelConfig = {
     // scheduler because there is no parent /api/cron/ingest/route.ts.
     { path: "/api/cron/ingest/insider-filing-agent", schedule: "0 7 * * *" },
     { path: "/api/cron/ingest/thirteen-f-agent", schedule: "15 7 * * *" },
+    // Diff layer reads thirteen-f-agent's output and emits quarter-over-
+    // quarter NEW_ENTRY / EXIT / GROW / SHRINK signals with `side`
+    // populated. Runs 30 min after the snapshot agent so the snapshots
+    // it diffs against are guaranteed landed.
+    { path: "/api/cron/ingest/thirteen-f-diff-agent", schedule: "45 7 * * *" },
     // congress-agent re-enabled 2026-04-24 after upstream swap from the
     // dead senatestockwatcher.com community mirror to the official
     // efdsearch.senate.gov system. See lib/ingestion/agents/congress.ts
