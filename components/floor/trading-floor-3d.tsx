@@ -15,12 +15,14 @@
 import { useRef } from "react"
 import { useFrame } from "@react-three/fiber"
 import {
-  Environment,
   Grid,
   OrbitControls,
   Stars,
   Text,
 } from "@react-three/drei"
+// Environment removed — fetches an HDR map from a CDN at runtime which
+// crashes the scene on networks that block third-party HDR hosts.
+// Ambient lighting from ambientLight + directionalLight is enough.
 import * as THREE from "three"
 import { AgentCharacter } from "./agent-figure"
 import { ActiveBeams } from "./connection-beams"
@@ -323,7 +325,6 @@ export function TradingFloor3D({
       <pointLight position={[0, 8, 0]} intensity={0.2} color="#0a0a20" />
       <fog attach="fog" args={["#050508", 18, 40]} />
 
-      <Environment preset="night" />
       <FloorGrid />
       <BackWall />
       <Walls />
