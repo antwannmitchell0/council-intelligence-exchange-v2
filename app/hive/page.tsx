@@ -122,15 +122,21 @@ export default async function HivePage() {
                     </p>
                   </div>
                   <p className="mono col-start-2 text-[11px] uppercase tracking-[0.14em] text-ink-body/70 sm:col-start-3 sm:text-right">
-                    {formatRelativePublic(entry.hours_since_seen)}
+                    Last signal · {formatRelativePublic(entry.hours_since_last_signal)}
                   </p>
                   <p className="mono col-start-2 text-[11px] uppercase tracking-[0.14em] text-ink-body/70 sm:col-start-4 sm:text-right">
-                    {entry.signals_24h.toLocaleString()} sig/24h
+                    {entry.signals_lifetime.toLocaleString()} signals lifetime
                   </p>
                 </li>
               )
             })}
           </ul>
+
+          {/* Cadence note — explains why some agents look quiet */}
+          <p className="mono mt-6 text-[11px] uppercase tracking-[0.14em] text-ink-veiled">
+            Cadence varies · SEC EDGAR + FRED + BLS + Senate eFD publish on
+            weekdays only. Quiet agents on weekends + holidays are normal.
+          </p>
         </section>
 
         {/* Verification schedule */}

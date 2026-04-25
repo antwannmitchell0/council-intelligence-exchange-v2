@@ -158,10 +158,22 @@ export type PublicAgentEntry = {
   agent_id: string
   display_name: string
   description: string
-  // status_emoji: green (live), amber (wired/awaiting baseline), gray (roadmap)
+  // tier: live (production-ready, ingesting), wiring (ingestion works
+  // but routing/mapping pending), roadmap (not yet built).
   tier: "live" | "wiring" | "roadmap"
-  signals_24h: number
-  hours_since_seen: number | null
+  // Lifetime signal count — never decreases. The right metric for
+  // "how much has this agent produced since Day 0?". 24h windows
+  // misleadingly hit zero on weekends/holidays when SEC / FRED / BLS
+  // don't publish — agents look dead when they're actually fine.
+  signals_lifetime: number
+  // Hours since the agent's most recent SIGNAL (not heartbeat). Direct
+  // freshness indicator. Null if agent has never produced a signal.
+  hours_since_last_signal: number | null
+  // Hours since the agent last RAN (heartbeat). Distinct from signal
+  // freshness — an agent can run successfully and produce zero signals
+  // when upstream has no new data (weekend, holiday, normal sparse
+  // cadence).
+  hours_since_heartbeat: number | null
 }
 
 const PUBLIC_AGENT_META: Array<{
@@ -254,62 +266,85 @@ export async function getPublicAgentRoster(): Promise<PublicAgentEntry[]> {
   if (!supabase) {
     return PUBLIC_AGENT_META.map((m) => ({
       ...m,
-      signals_24h: 0,
-      hours_since_seen: null,
+      signals_lifetime: 0,
+      hours_since_last_signal: null,
+      hours_since_heartbeat: null,
     }))
   }
 
-  const since24h = new Date(
-    Date.now() - 24 * 60 * 60 * 1000
-  ).toISOString()
+  // Per-agent lifetime count via parallel head-only queries — one per
+  // agent. Cheap (count: exact + head: true returns just an integer)
+  // and avoids reading 12k+ rows into memory just to bucket them.
+  const lifetimeCountPromises = PUBLIC_AGENT_META.map((m) =>
+    supabase
+      .from("v2_signals")
+      .select("*", { count: "exact", head: true })
+      .eq("agent_id", m.agent_id)
+      .then((r) => ({ agent_id: m.agent_id, count: r.count ?? 0 }))
+  )
 
-  // Heartbeats give us last_seen.
-  const { data: heartbeats } = await supabase
+  // Per-agent most-recent signal timestamp — one row each, ordered
+  // descending. Limit 1 = single row return.
+  const lastSignalPromises = PUBLIC_AGENT_META.map((m) =>
+    supabase
+      .from("v2_signals")
+      .select("created_at")
+      .eq("agent_id", m.agent_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then((r) => ({
+        agent_id: m.agent_id,
+        last_signal_at: (r.data as { created_at?: string } | null)?.created_at ?? null,
+      }))
+  )
+
+  // Heartbeats — single query for all agents.
+  const heartbeatPromise = supabase
     .from("v2_agent_heartbeats")
     .select("agent_id, last_seen")
+
+  const [lifetimes, lastSignals, heartbeats] = await Promise.all([
+    Promise.all(lifetimeCountPromises),
+    Promise.all(lastSignalPromises),
+    heartbeatPromise,
+  ])
+
+  const lifetimeMap = new Map<string, number>()
+  for (const r of lifetimes) lifetimeMap.set(r.agent_id, r.count)
+
+  const lastSignalMap = new Map<string, string | null>()
+  for (const r of lastSignals)
+    lastSignalMap.set(r.agent_id, r.last_signal_at)
+
   const heartbeatMap = new Map<string, string>()
-  for (const r of (heartbeats ?? []) as Array<{
+  for (const r of (heartbeats.data ?? []) as Array<{
     agent_id: string
     last_seen: string
   }>) {
     heartbeatMap.set(r.agent_id, r.last_seen)
   }
 
-  // 24h signal counts per agent — bucket via JS.
-  const tradingFilter = `agent_id.in.(${TRADING_AGENT_IDS.join(",")})`
-  const { data: recent } = await supabase
-    .from("v2_signals")
-    .select("agent_id")
-    .or(tradingFilter)
-    .gte("created_at", since24h)
-    .limit(50000)
-  const countByAgent = new Map<string, number>()
-  for (const r of (recent ?? []) as Array<{ agent_id: string }>) {
-    countByAgent.set(r.agent_id, (countByAgent.get(r.agent_id) ?? 0) + 1)
+  const now = Date.now()
+  function hoursSince(iso: string | null | undefined): number | null {
+    if (!iso) return null
+    const ms = Date.parse(iso)
+    if (!Number.isFinite(ms)) return null
+    return (now - ms) / (60 * 60 * 1000)
   }
 
-  const now = Date.now()
-  return PUBLIC_AGENT_META.map((m) => {
-    const last = heartbeatMap.get(m.agent_id)
-    let hours: number | null = null
-    if (last) {
-      const ms = Date.parse(last)
-      if (Number.isFinite(ms)) {
-        hours = (now - ms) / (60 * 60 * 1000)
-      }
-    }
-    return {
-      ...m,
-      signals_24h: countByAgent.get(m.agent_id) ?? 0,
-      hours_since_seen: hours,
-    }
-  })
+  return PUBLIC_AGENT_META.map((m) => ({
+    ...m,
+    signals_lifetime: lifetimeMap.get(m.agent_id) ?? 0,
+    hours_since_last_signal: hoursSince(lastSignalMap.get(m.agent_id) ?? null),
+    hours_since_heartbeat: hoursSince(heartbeatMap.get(m.agent_id) ?? null),
+  }))
 }
 
 export function formatRelativePublic(hours: number | null): string {
-  if (hours == null) return "no heartbeat yet"
+  if (hours == null) return "—"
   if (hours < 1) return "moments ago"
   if (hours < 36) return `${Math.round(hours)}h ago`
   if (hours < 72) return `${Math.round(hours / 24)}d ago`
-  return `${Math.round(hours / 24)}d ago — investigate`
+  return `${Math.round(hours / 24)}d ago`
 }
