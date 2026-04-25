@@ -206,9 +206,16 @@ export class ThirteenFAgent extends BaseIngestionAgent {
   protected async fetch(): Promise<RawSignal[]> {
     assertSecEnv()
 
-    // Last 24h of new 13F-HR filings.
+    // Lookback window for 13F-HR filings. Default = 1 day (the cron tick
+    // catches yesterday's filings). Override via THIRTEEN_F_LOOKBACK_DAYS
+    // env var for backfills — set to 90 once at deploy time, trigger the
+    // cron, then unset so daily ticks return to normal cadence.
+    const lookbackDays = Math.max(
+      1,
+      Math.min(365, Number(process.env.THIRTEEN_F_LOOKBACK_DAYS ?? "1"))
+    )
     const end = new Date()
-    const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+    const start = new Date(end.getTime() - lookbackDays * 24 * 60 * 60 * 1000)
 
     const params = new URLSearchParams({
       forms: "13F-HR",

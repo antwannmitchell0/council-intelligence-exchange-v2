@@ -7,6 +7,7 @@ export const primaryNav: NavLink[] = [
   { href: "/hive", label: "The Hive" },
   { href: "/intelligence", label: "Intelligence" },
   { href: "/trading", label: "Trading" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/floor", label: "Floor" },
 ]
 

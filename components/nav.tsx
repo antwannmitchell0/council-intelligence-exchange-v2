@@ -35,10 +35,10 @@ export function Nav() {
         </nav>
 
         <Link
-          href="/agents"
+          href="/pricing"
           className="inline-flex items-center gap-2 rounded-[8px] bg-violet px-4 py-2 text-[13px] font-medium text-ink transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-violet-glow"
         >
-          Join Exchange
+          Get Early Access
         </Link>
       </div>
 

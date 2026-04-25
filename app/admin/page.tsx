@@ -16,9 +16,11 @@ import {
   formatRelative,
   getAgentFleetStatus,
   getHealthStatus,
+  getRevenueStatus,
   type AgentFleetEntry,
   type AgentTier,
   type HealthStatus,
+  type RevenueStatus,
 } from "@/lib/admin/status"
 
 export const dynamic = "force-dynamic"
@@ -38,9 +40,9 @@ type Section = {
 
 const sections: Section[] = [
   {
-    title: "Production & monitoring",
+    title: "Production & ops",
     description:
-      "Live site, scheduled crons, uptime alerts. First place to look when something feels off.",
+      "The app itself. Live site, health endpoint, Vercel project home.",
     links: [
       {
         label: "Live site",
@@ -54,20 +56,129 @@ const sections: Section[] = [
           "JSON: supabase + alpaca + sec-edgar checks. 200 = ok, 503 = degraded.",
       },
       {
+        label: "Vercel project dashboard",
+        href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2",
+        description: "Deploys, env vars, crons, runtime logs.",
+      },
+    ],
+  },
+  {
+    title: "Security & monitoring",
+    description:
+      "Every watchdog pointed at the exchange. Uptime, error tracking, cron alerts, platform security dashboards. Start here when something feels off — three independent failure surfaces, three independent notification channels.",
+    links: [
+      {
         label: "UptimeRobot — /api/health",
         href: "https://dashboard.uptimerobot.com/monitors/802919772",
-        description: "5-min interval. Email + SMS + voice alerts on 503.",
+        description:
+          "5-min interval pings /api/health. Email + SMS + voice alerts when the endpoint returns 503.",
+      },
+      {
+        label: "Sentry — issues feed",
+        href: "https://demm.sentry.io/issues/?project=4511278262386688",
+        description:
+          "Uncaught exceptions, hydration errors, stack traces, session replays. Email on new issues.",
+      },
+      {
+        label: "Sentry — smoke test",
+        href: "/api/admin/sentry-test",
+        description:
+          "Deliberate throw — hit monthly to confirm error capture is still live end-to-end.",
       },
       {
         label: "Discord — #general (cron alerts)",
         href: "https://discord.com/channels/1497409185791348819/1497409186567553127",
         description:
-          "Council Cron bot posts 🚨 red-bar alerts here when an agent run fails or throws.",
+          "Council Cron bot posts 🚨 red-bar alerts when an ingest agent run fails or throws.",
       },
       {
-        label: "Vercel project dashboard",
-        href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2",
-        description: "Deploys, env vars, crons, runtime logs.",
+        label: "GitHub — Security tab",
+        href: "https://github.com/antwannmitchell0/council-intelligence-exchange-v2/security",
+        description:
+          "Dependabot advisories, secret scanning, code scanning alerts. Check weekly.",
+      },
+      {
+        label: "GitHub — Dependabot alerts",
+        href: "https://github.com/antwannmitchell0/council-intelligence-exchange-v2/security/dependabot",
+        description: "Vulnerable package advisories (npm + transitive deps).",
+      },
+      {
+        label: "Vercel — Security settings",
+        href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2/settings/security",
+        description:
+          "Deployment protection, DDoS, firewall rules, trusted IPs, attack challenge mode.",
+      },
+      {
+        label: "Vercel — Audit log",
+        href: "https://vercel.com/antwanns-projects/~/settings/audit-log",
+        description: "Every config change across the team — who did what, when.",
+      },
+      {
+        label: "Supabase — Auth settings",
+        href: "https://supabase.com/dashboard/project/_/auth/users",
+        description:
+          "User accounts, session policies, JWT settings, providers (pick project after click).",
+      },
+      {
+        label: "Supabase — Auth logs",
+        href: "https://supabase.com/dashboard/project/_/logs/auth-logs",
+        description: "Sign-ins, sign-outs, failed auth attempts.",
+      },
+      {
+        label: "Supabase — Database logs",
+        href: "https://supabase.com/dashboard/project/_/logs/postgres-logs",
+        description: "Slow queries, errors, connection spikes.",
+      },
+    ],
+  },
+  {
+    title: "Revenue & subscribers",
+    description:
+      "Stripe billing, Resend email, the subscriber list. Where money + customer comms live.",
+    links: [
+      {
+        label: "Stripe — Dashboard",
+        href: "https://dashboard.stripe.com",
+        description: "Payments, customers, invoices, disputes.",
+      },
+      {
+        label: "Stripe — Payment Links",
+        href: "https://dashboard.stripe.com/payment-links",
+        description:
+          "The $49/mo Early Access link is generated here. Edit the price, the success page, the trial.",
+      },
+      {
+        label: "Stripe — Subscriptions",
+        href: "https://dashboard.stripe.com/subscriptions",
+        description: "Active customers + MRR. Cross-check with /admin tile.",
+      },
+      {
+        label: "Stripe — Webhooks",
+        href: "https://dashboard.stripe.com/webhooks",
+        description:
+          "If subscribers aren't appearing in /admin, check delivery here.",
+      },
+      {
+        label: "Resend — Dashboard",
+        href: "https://resend.com/overview",
+        description: "Email send volume, deliverability, bounces.",
+      },
+      {
+        label: "Resend — Domains",
+        href: "https://resend.com/domains",
+        description:
+          "DNS verification status. Add SPF + DKIM + DMARC for demmmarketing.com to escape onboarding@resend.dev fallback.",
+      },
+      {
+        label: "Resend — Emails sent",
+        href: "https://resend.com/emails",
+        description:
+          "Per-email log: welcome, daily digest, etc. Resend if a customer says they didn't get one.",
+      },
+      {
+        label: "Pricing page (live)",
+        href: "/pricing",
+        description: "What customers see when they click 'Get Early Access'.",
       },
     ],
   },
@@ -299,6 +410,69 @@ function FleetRow({ entry }: { entry: AgentFleetEntry }) {
   )
 }
 
+function RevenuePanel({ revenue }: { revenue: RevenueStatus }) {
+  if (!revenue.ok) {
+    return (
+      <div className="flex flex-col gap-2 rounded-md border border-amber-400/30 bg-amber-400/[0.04] px-5 py-4">
+        <p className="mono text-[11px] uppercase tracking-[0.18em] text-amber-300/90">
+          Revenue snapshot unavailable
+        </p>
+        <p className="text-[12px] text-ink-body/70">
+          {revenue.error ?? "v2_subscribers query failed"}. Apply migration
+          0016_subscribers.sql in Supabase if you haven&apos;t yet.
+        </p>
+      </div>
+    )
+  }
+  const tiles: { label: string; value: string; sub?: string }[] = [
+    {
+      label: "MRR",
+      value: `$${revenue.mrr_usd.toLocaleString()}`,
+      sub: "monthly recurring",
+    },
+    {
+      label: "Active subs",
+      value: revenue.active_subscribers.toLocaleString(),
+      sub:
+        revenue.new_last_7d > 0
+          ? `+${revenue.new_last_7d} last 7d`
+          : "no growth last 7d",
+    },
+    {
+      label: "Past due",
+      value: revenue.past_due.toLocaleString(),
+      sub: revenue.past_due > 0 ? "needs attention" : "all clear",
+    },
+    {
+      label: "Canceled (lifetime)",
+      value: revenue.canceled.toLocaleString(),
+      sub: "churned",
+    },
+  ]
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {tiles.map((t) => (
+        <div
+          key={t.label}
+          className="flex flex-col gap-1 rounded-md border border-graphite bg-void/40 px-4 py-3"
+        >
+          <p className="mono text-[10px] uppercase tracking-[0.18em] text-ink-veiled">
+            {t.label}
+          </p>
+          <p className="text-[24px] font-semibold tracking-tight text-ink">
+            {t.value}
+          </p>
+          {t.sub ? (
+            <p className="mono text-[10px] uppercase tracking-[0.14em] text-ink-body/60">
+              {t.sub}
+            </p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function FleetPanel({ fleet }: { fleet: AgentFleetEntry[] }) {
   if (fleet.length === 0) {
     return (
@@ -363,11 +537,12 @@ function LinkCard({ link }: { link: Link }) {
 export default async function AdminPage() {
   if (!(await isAdminAuthed())) redirect("/admin/login")
 
-  // Both panels fetch in parallel. Either failure is non-fatal — the page
+  // All panels fetch in parallel. Any failure is non-fatal — the page
   // renders with degraded status indicators rather than 500'ing.
-  const [health, fleet] = await Promise.all([
+  const [health, fleet, revenue] = await Promise.all([
     getHealthStatus(),
     getAgentFleetStatus(),
+    getRevenueStatus(),
   ])
 
   return (
@@ -401,6 +576,21 @@ export default async function AdminPage() {
         <div className="mt-12">
           <HealthBanner health={health} />
         </div>
+
+        {/* Revenue snapshot — MRR, active subs, growth, churn */}
+        <section className="mt-10">
+          <p className="mono text-[11px] uppercase tracking-[0.24em] text-ink-muted">
+            Revenue · Early Access
+          </p>
+          <p className="mt-2 max-w-[58ch] text-[13px] leading-[1.6] text-ink-body/60">
+            Subscriber tier is $49/mo. MRR = active count × $49. Past-due =
+            payment failed but Stripe is retrying — reach out before they
+            churn.
+          </p>
+          <div className="mt-6">
+            <RevenuePanel revenue={revenue} />
+          </div>
+        </section>
 
         {/* Live agent fleet status — heartbeats + 24h signal counts */}
         <section className="mt-12">
