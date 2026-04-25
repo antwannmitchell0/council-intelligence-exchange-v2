@@ -3,7 +3,9 @@
 // The `agent` param maps to a BaseIngestionAgent factory in the registry.
 
 import { NextResponse } from "next/server"
+import { waitUntil } from "@vercel/functions"
 import { resolveAgent, listRegisteredAgents } from "@/lib/ingestion/registry"
+import { sendAlert } from "@/lib/notifications/webhook"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,6 +24,33 @@ function logEvent(event: string, data: Record<string, unknown>): void {
   } catch {
     console.log(event, data)
   }
+}
+
+// Fire-and-forget alert. We use waitUntil so the cron's response isn't
+// gated on the webhook round-trip; if the webhook is slow or fails, the
+// cron itself still returns on time.
+function alertFailure(
+  agentId: string,
+  reason: string,
+  detail: string
+): void {
+  waitUntil(
+    sendAlert({
+      severity: "error",
+      title: `Cron failed: ${agentId}`,
+      description: `**${reason}**\n\n${detail}`,
+      fields: [
+        { name: "Agent", value: agentId, inline: true },
+        { name: "Reason", value: reason, inline: true },
+        {
+          name: "Vercel logs",
+          value:
+            "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2/logs",
+          inline: false,
+        },
+      ],
+    })
+  )
 }
 
 export async function GET(request: Request, ctx: RouteContext) {
@@ -84,6 +113,13 @@ export async function GET(request: Request, ctx: RouteContext) {
       http,
       request_duration_ms: Date.now() - requestedAt,
     })
+    if (result.status === "failed") {
+      alertFailure(
+        agentId,
+        "agent_run_returned_failed",
+        `errors: ${result.errors}\nwarnings: ${result.warnings.join("; ") || "none"}`
+      )
+    }
     return NextResponse.json({ ok: result.status !== "failed", result }, { status: http })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -94,6 +130,7 @@ export async function GET(request: Request, ctx: RouteContext) {
       stack,
       request_duration_ms: Date.now() - requestedAt,
     })
+    alertFailure(agentId, "agent_run_threw", message)
     return NextResponse.json(
       { ok: false, error: "agent_run_threw", message, agent_id: agentId },
       { status: 500 }

@@ -51,6 +51,12 @@ const sections: Section[] = [
         description: "5-min interval. Email + SMS + voice alerts on 503.",
       },
       {
+        label: "Discord — #general (cron alerts)",
+        href: "https://discord.com/channels/1497409185791348819/1497409186567553127",
+        description:
+          "Council Cron bot posts 🚨 red-bar alerts here when an agent run fails or throws.",
+      },
+      {
         label: "Vercel project dashboard",
         href: "https://vercel.com/antwanns-projects/council-intelligence-exchange-v2",
         description: "Deploys, env vars, crons, runtime logs.",
