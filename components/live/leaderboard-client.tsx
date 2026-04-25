@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { getBrowserClient } from "@/lib/supabase/client"
-import { council } from "@/design/tokens"
 import { BLANK } from "@/lib/render-if-verified"
 import type { AgentRow, LeaderboardRow } from "@/lib/supabase/types"
 
@@ -14,12 +13,6 @@ type Props = {
 export function LeaderboardClient({ initialRows, agents }: Props) {
   const [rows, setRows] = useState<LeaderboardRow[]>(initialRows)
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set())
-
-  const agentMap = useMemo(() => {
-    const m = new Map<string, AgentRow>()
-    for (const a of agents) m.set(a.id, a)
-    return m
-  }, [agents])
 
   useEffect(() => {
     const supabase = getBrowserClient()
@@ -69,27 +62,19 @@ export function LeaderboardClient({ initialRows, agents }: Props) {
       </div>
 
       <ul>
-        {[...council.agent]
+        {[...agents]
           .sort((a, b) => {
             const ra = byAgent.get(a.id)?.rank ?? 999
             const rb = byAgent.get(b.id)?.rank ?? 999
             return ra - rb
           })
-          .map((staticAgent) => {
-            const agent = agentMap.get(staticAgent.id) ?? {
-              ...staticAgent,
-              brief: null,
-              bio_md: null,
-              specialty: null,
-              joined_at: new Date().toISOString(),
-              status: "pending" as const,
-            }
-            const row = byAgent.get(staticAgent.id)
-            const flashing = flashIds.has(staticAgent.id)
+          .map((agent) => {
+            const row = byAgent.get(agent.id)
+            const flashing = flashIds.has(agent.id)
             const rank = row?.rank ?? null
             return (
               <li
-                key={staticAgent.id}
+                key={agent.id}
                 className={`grid grid-cols-[48px_1fr_120px_120px_80px] items-center gap-4 border-b border-graphite/60 px-6 py-5 last:border-b-0 transition-colors duration-[120ms] [transition-timing-function:var(--ease-council)] hover:bg-graphite/40 ${
                   flashing ? "bg-violet-deep/10" : ""
                 }`}
