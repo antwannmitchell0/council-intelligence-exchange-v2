@@ -37,21 +37,26 @@ export const config: VercelConfig = {
     // Phase 3 trading-specialist ingestion — daily cadence (Vercel Hobby limit).
     // Staggered across the morning so pulls don't thundering-herd the same upstream.
     // Upgrade to Pro unlocks sub-daily cadence for the time-sensitive sources.
-    { path: "/api/cron/ingest?agent=insider-filing-agent", schedule: "0 7 * * *" },
-    { path: "/api/cron/ingest?agent=thirteen-f-agent", schedule: "15 7 * * *" },
+    //
+    // Path-segment form is required — the route handler is a Next.js
+    // dynamic route at app/api/cron/ingest/[agent]/route.ts. The earlier
+    // query-string declarations (`?agent=X`) silently 404'd against the
+    // scheduler because there is no parent /api/cron/ingest/route.ts.
+    { path: "/api/cron/ingest/insider-filing-agent", schedule: "0 7 * * *" },
+    { path: "/api/cron/ingest/thirteen-f-agent", schedule: "15 7 * * *" },
     // congress-agent re-enabled 2026-04-24 after upstream swap from the
     // dead senatestockwatcher.com community mirror to the official
     // efdsearch.senate.gov system. See lib/ingestion/agents/congress.ts
     // for the three-step CSRF/cookie fetch flow.
-    { path: "/api/cron/ingest?agent=congress-agent", schedule: "30 7 * * *" },
-    { path: "/api/cron/ingest?agent=yield-curve-agent", schedule: "0 8 * * *" },
-    { path: "/api/cron/ingest?agent=jobs-data-agent", schedule: "15 8 * * *" },
-    { path: "/api/cron/ingest?agent=fed-futures-agent", schedule: "30 8 * * *" },
+    { path: "/api/cron/ingest/congress-agent", schedule: "30 7 * * *" },
+    { path: "/api/cron/ingest/yield-curve-agent", schedule: "0 8 * * *" },
+    { path: "/api/cron/ingest/jobs-data-agent", schedule: "15 8 * * *" },
+    { path: "/api/cron/ingest/fed-futures-agent", schedule: "30 8 * * *" },
     // Phase 6a archetype ingestion — daily cadence.
-    { path: "/api/cron/ingest?agent=gdelt-event-volume-agent", schedule: "0 10 * * *" },
-    { path: "/api/cron/ingest?agent=wiki-edit-surge-agent", schedule: "30 9 * * *" },
-    { path: "/api/cron/ingest?agent=etherscan-whale-agent", schedule: "0 11 * * *" },
-    { path: "/api/cron/ingest?agent=clinical-trial-outcomes-agent", schedule: "0 12 * * *" },
+    { path: "/api/cron/ingest/gdelt-event-volume-agent", schedule: "0 10 * * *" },
+    { path: "/api/cron/ingest/wiki-edit-surge-agent", schedule: "30 9 * * *" },
+    { path: "/api/cron/ingest/etherscan-whale-agent", schedule: "0 11 * * *" },
+    { path: "/api/cron/ingest/clinical-trial-outcomes-agent", schedule: "0 12 * * *" },
     // Phase 4 broker-paper reconciler. Daily cadence fits Vercel Hobby's
     // 1/day cron limit; upgrade to Pro unlocks 15-min polling during
     // US market hours — the spec we want long-term is:
